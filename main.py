@@ -1,4 +1,4 @@
-﻿from gameoflife import *
+﻿from simulate import *
 from cmdline import *
 from gui import GUI
 from gridtools import cluster, countLiveCells
@@ -16,9 +16,9 @@ parser = argparse.ArgumentParser(description="Game of Life Analysis Frontend",
 parser.add_argument('-f', '--frac', help="Fraction of cells alive at beginning",
                     type=float, default=0.35) #
 parser.add_argument('-r', '--rows', help="Number of rows of the grid",
-                    type=int, default=128) #
+                    type=int, default=32) #
 parser.add_argument('-c', "--cols", help="Number of columns of the grid",
-                    type=int, default=256) #
+                    type=int, default=64) #
 parser.add_argument('-e', "--extraspace",
                     help="Amount of extra space to add to adjacency grid",
                     type=int, default=5) #
@@ -65,7 +65,7 @@ parser.add_argument('-db', "--debug", help="Enter debug mode",
 parser.add_argument('-s', "--sample", help="When using output modes 3 or 4, how often should the grid be sampled?",
                     type=int, default=10)
 
-parser.add_argument('-of', "--outfile", help="Output file to store data in", default="D:/Dropbox/Documents/gameoflife_data/")
+parser.add_argument('-of', "--outfile", help="Output file to store data in", default="D:/OneDrive/Documents/genedrive_data/")
 
 args = parser.parse_args()
 
@@ -94,24 +94,26 @@ def main():
     start = timer()
     dim = np.array([args.rows,args.cols])
     grid = genRandGrid(dim, prob=args.frac)
-    game = Game(grid, dim, torusAdjFunc, args.extraspace)
+    payoffMatrix = np.array([[0,1],[1j,2]], dtype = np.complex128)
+    fdscp = FDSCP(dim, payoffMatrix, torusAdjFunc, args.extraspace, grid)
     if args.debug:
-        print("Initialized game. Time elapsed: " + str(timer() - start))
+        print("Initialized simulation. Time elapsed: " + str(timer() - start))
     # original torus adjacency grid, to be used as fresh template for
     # smallworld
-    origAdjGrid = np.copy(game.adjGrid)
+    origAdjGrid = np.copy(fdscp.adjGrid)
     # amount of small-world-ification to do
     swc = args.minswc
     # "fudge factor" needed because decimals are weird
+    # TODO: Remove cuda until needed
     while swc <= args.maxswc + 0.0000000001:
         # changing small-world-ification; need to re-do smallWorldIfy
-        game.adjGrid = np.copy(origAdjGrid)
+        fdscp.adjGrid = np.copy(origAdjGrid)
         strswc = str(round(swc, 6))
         if args.debug:
             print("SWC = " + strswc + ". Time elapsed: " + str(timer() - start))
-        smallWorldIfyHeterogeneous(game.adjGrid, swc, args.heterogeneity, args.replace)
+        smallWorldIfyHeterogeneous(fdscp.adjGrid, swc, args.heterogeneity, args.replace)
         if args.debug:
-            print(game.adjGrid)
+            print(fdscp.adjGrid)
             print("Grid smallworldified. Time elapsed: " + str(timer() - start))
         # these will be arrays of the values for every simulation
         livecells = np.zeros(args.niters)
@@ -126,23 +128,23 @@ def main():
                     "_sim=" + str(sim) + datestr + ".txt", "w")
                 outfile_steps.writelines("Step  LiveCells Cluster\n")
             # reset grid to fresh state
-            game.grid = genRandGrid(dim, prob=args.frac)
-            grid = game.grid
+            fdscp.grid = genRandGrid(dim, prob=args.frac)
+            grid = fdscp.grid
             if args.debug:
                 print("Grid reset. Time elapsed: " + str(timer() - start))
             steps = args.simlength
             if args.output < 3:
-                grid = run_GPU(game.grid, game.adjGrid, steps, args.delay, 0,
+                grid = run_GPU(fdscp.grid, fdscp.adjGrid, steps, args.delay, 0,
                                args.visible, -1)
             else:
                 for step in range(steps//args.sample + 1):
                     if args.debug:
                         print("Step = " + str(step) + " Time elapsed: " + str(timer() - start))
                     # output data to file
-                    outfile_steps.writelines(str(step * args.sample) + "    " + str(countLiveCells(grid)) + "    " + str(cluster(grid, game.adjGrid)) + "\n")
+                    outfile_steps.writelines(str(step * args.sample) + "    " + str(countLiveCells(grid)) + "    " + str(cluster(grid, fdscp.adjGrid)) + "\n")
                     # step once
-                    grid = run_GPU(game.grid, game.adjGrid, args.sample, args.delay, 0, args.visible, -1)
-                    game.grid = grid
+                    # grid = run_GPU(fdscp.grid, fdscp.adjGrid, args.sample, args.delay, 0, args.visible, -1)
+                    fdscp.update()
                     # make file, and output grid to that file
                     if args.output >= 4:
                         outfile_grids = open(args.outfile + folder + "data4/" + "swc=" + strswc + "_sim=" + str(sim) + "_step=" + str(step * args.sample) + datestr + ".txt", "w")
@@ -155,7 +157,7 @@ def main():
                 print("Simulation finished. Time elapsed: " + str(timer() - start))
 
             livecells[sim] = countLiveCells(grid)
-            cl[sim] = cluster(grid, game.adjGrid)
+            cl[sim] = cluster(grid, fdscp.adjGrid)
             
             if args.debug:
                 print("Finished computing live cells and clustering. Time elapsed: " + str(timer() - start))

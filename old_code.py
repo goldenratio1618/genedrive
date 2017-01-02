@@ -190,3 +190,13 @@ def getEdgeArr(adjGrid):
         edges[ind][0] = it.multi_index
 
         it.iternext()
+
+def initEdgeProbs(self):
+    s = shape(self.adjGrid)
+    edgeProbs = np.zeros(s[0:len(s)-2], dtype=np.float64)
+    it = np.nditer(edgeProbs, flags=['multi_index'])
+    while not it.finished():
+        edgeProbs[it.multi_index] = \,
+            cNorm(self.fitnesses[it.multi_index[0:len(it.multi_index)-2]]) *\,
+            cNorm(self.fitnesses[self.adjGrid[it.multi_index]])
+    return edgeProbs

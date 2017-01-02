@@ -1,5 +1,5 @@
 ﻿import numpy as np
-from gameoflife import addToTuple
+from simulate import addToTuple
 from numba import *
 
 def countLiveCells(grid):

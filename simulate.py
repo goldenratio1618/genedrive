@@ -1,7 +1,7 @@
 ﻿from copy import deepcopy
 from math import floor
 import cmath
-from numbapro import cuda
+#from cudatoolkit import cuda
 from numba import *
 import numpy as np
 from timeit import default_timer as timer
@@ -11,43 +11,100 @@ from random import randrange
 def cNorm(a):
     return a.real + a.imag
 
+def dual(dim, adjGrid):
+    iter_arr = np.zeros(adjGrid.shape[0:len(adjGrid.shape) - 1])
+    dualAdjGrid = np.zeros(adjGrid.shape)
+    currentPos = np.zeros(dim, dtype=np.int8)
+    it = np.nditer(iter_arr, flags=['multi_index'])
+    while not it.finished:
+        pos = it.multi_index[0:len(dim)]
+        if (adjGrid[it.multi_index] != dim).any():
+            # print('printing stuff')
+            # print(it.multi_index)
+            # print(adjGrid[it.multi_index])
+            # print(currentPos[pos])
+            # print(dualAdjGrid.shape)
+            dualAdjGrid[tuple(adjGrid[it.multi_index])][currentPos[pos]] = pos
+        currentPos[pos] += 1
+        it.iternext()
+    # fill the rest of the dual adjGrid with 'blank' values
+    it = np.nditer(iter_arr, flags=['multi_index'])
+    while not it.finished:
+        pos = it.multi_index[0:len(dim)]
+        while currentPos[pos] < adjGrid.shape[len(adjGrid.shape) - 1]:
+            dualAdjGrid[tuple(adjGrid[it.multi_index])][currentPos[pos]] = dim
+            currentPos[pos] += 1
+        it.iternext()
+    return dualAdjGrid
+
+
 """ Code for initializing fitness values for each location in grid."""
 class FDSCP:
-    def __init__(self, dim, payoffMatrix, adjGrid, grid):
+    def __init__(self, dim, payoffMatrix, adjFunc, extraSpace, grid):
         self.dim = dim
         self.payoffMatrix = payoffMatrix
-        self.adjGrid = adjGrid
+        self.adjGrid = initAdjGrid(adjFunc, self.dim, extraSpace)
         self.grid = grid
-        self.dualAdjGrid = self.dual(adjGrid)
+        self.dualAdjGrid = dual(self.dim, self.adjGrid)
         self.fitnesses = self.initFitnesses()
-        self.edgeProbs = self.initEdgeProbs()
+        self.totEdgeProb = np.sum(self.fitnesses)
 
     #TODO: Make sure this will actually work (especially with adjGrid having a buffer)
     #TODO: Make this more efficient (by creating backwards adjGrid)
     def initFitnesses(self):
-        fitnesses = np.zeros(self.grid.shape(), dtype=np.complex128)
-        it = np.nditer(iter_arr, flags=['multi_index'])
-        while not it.finished():
+        fitnesses = np.zeros(self.grid.shape, dtype=np.complex128)
+        it = np.nditer(fitnesses, flags=['multi_index'])
+        while not it.finished:
             fitnesses[it.multi_index] = self.computeFitness(it.multi_index)
         return fitnesses
 
-    def initEdgeProbs(self):
-        s = shape(self.adjGrid)
-        edgeProbs = np.zeros(s[0:len(s)-2], dtype=np.float64)
-        it = np.nditer(edgeProbs, flags=['multi_index'])
-        while not it.finished():
-            edgeProbs[it.multi_index] =...
-                cNorm(self.fitnesses[it.multi_index[0:len(it.multi_index)-2]]) *...
-                cNorm(self.fitnesses[self.adjGrid[it.multi_index]])
-        return edgeProbs
 
 
     def computeFitness(self, loc):
         """ Computes the fitness of the individual at location loc. """
         payoff = 0
         for adjLoc in self.adjGrid[loc]:
-            payoff += self.payoffMatrix[self.grid[loc]][self.grid[adjLoc]]
+            if (adjLoc != self.dim).any():
+                payoff += self.payoffMatrix[self.grid[loc]][self.grid[tuple(adjLoc)]]
         return payoff
+
+    def update(self, loc, old, new):
+        """ Updates fitnesses and edge probabilities when the individual at loc changes
+            type from old to new """
+        for connLoc in self.dualAdjGrid[loc]:
+            if connLoc == self.dim:
+                continue
+            self.fitnesses[connLoc] += self.payoffMatrix[self.grid[connLoc]][new]
+            self.fitnesses[connLoc] -= self.payoffMatrix[self.grid[connLoc]][old]
+
+    def getRandInd(self):
+        """ Gets a random individual in the adjacency grid, with probability
+            proportional to that edge's fitness """
+        
+        it = np.nditer(self.fitnesses, flags = ['multi_index'])
+        prob = np.random.random() * self.totFitness
+        currProb = 0
+        while not it.finished:
+            currProb += self.fitnesses[it.multi_index]
+            if currProb >= prob:
+                return it.multi_index
+
+        raise ValueError("Invalid total edge probability.")
+
+    def evolve(self):
+        """ The original evolve function.
+            Works for grids of any dimension, but may be slower."""
+        # individual that gets to reproduce
+        ind = self.getRandInd()
+        # individual we are going to replace
+        replace = self.adjGrid[ind + (np.random.randint(0, len(self.adjGrid[ind])),)]
+        oldType = self.grid[replace]
+        r = np.random.random()
+        if r <= self.fitnesses[e[0]].real / cNorm(self.fitnesses[e[0]]):
+            self.grid[replace] = e[0]
+        else:
+            self.grid[replace] = (not e[0])
+        self.update(replace, oldType, self.grid[replace])
 
 
 """ Below are a variety of adjacency functions, which can be used
@@ -346,22 +403,11 @@ def smallWorldIfy(adjGrid, jumpProb):
     
 def getRandLoc(dim, loc=None):
     """ Generates a random location in the grid, that isn't loc. """
-    newLoc = tuple(np.random.randint(0, dim[i]) for i in range(len(dim)))
+    newLoc = tuple(np.random(0, dim[i]) for i in range(len(dim)))
     while newLoc == loc:
         newLoc = tuple(np.random.randint(0, dim[i]) for i in range(len(dim)))
     return newLoc
 
-
-
-    
-def getRandEdge(adjGrid, dim, fitnesses):
-    """ Gets a random edge in the adjacency grid. """
-    loc = getRandLoc(dim)
-    # we need a location that has an edge from it
-    while len(adjGrid[loc]) is 0:
-        loc = genRandLoc(dim)
-    loc2 = adjGrid[loc][np.random.randint(0,len(adjGrid[loc]))]
-    return [loc, loc2]
 
 
 
@@ -375,7 +421,7 @@ def genRandGrid(dim, prob=0.5):
 
 
 def gridToStr2D(grid):
-    """ Returns a string representation of grid, ignoring first row and column. """
+    """ Returns a string representation of grid, ignoring first row and column. OUT OF DATE """
     dim = grid.shape
     s = ""
     for i in range(1,dim[0]):
@@ -401,20 +447,7 @@ def addToTuple(tp, num):
 """ Evolution methods. These are placed outside the class for clarity, and to
     enable easier compiling or parallelization."""
 
-def evolve(dim, grid, adjGrid):
-    """ The original evolve function of the game of life. 
-        Works for grids of any dimension, but may be slower."""
-    # copy the grid so that further changes aren't decided by previous ones
-    newGrid = np.zeros(dim, dtype=np.int8)
-    it = np.nditer(grid, flags=['multi_index'], op_flags=['readonly'])
-    while not it.finished:
-        numAlive = 0
-        for adj in adjGrid[it.multi_index]:
-             numAlive += grid[tuple(adj)]
-        if numAlive == 3 or (numAlive == 2 and grid[it.multi_index] == 1):
-            newGrid[it.multi_index] = 1
-        it.iternext()
-    return newGrid
+
    
 @autojit
 def evolve2D(rows, cols, grid, adjGrid, newGrid):
@@ -432,27 +465,27 @@ def evolve2D(rows, cols, grid, adjGrid, newGrid):
                 newGrid[i,j] = 1
 
 
-@cuda.jit(argtypes=[uint8[:,:], uint32[:,:,:,:], uint8[:,:]])
-def evolve2D_kernel(grid, adjGrid, newGrid):
-    """ Like evolve, but only compatible with 2D arrays. Uses loops rather than
-        iterators, so hopefully easier to parallelize. Assumes grid and adjGrid
-        are what they should be for dim = dimArr[0:1] (AND ARE CONFIGURED.)
-        dimArr is [rows, cols, maxLen] """
-    rows = grid.shape[0] - 1
-    maxLen = adjGrid.shape[2]
-    cols = grid.shape[1] - 1
-    startX, startY = cuda.grid(2)
-    gridX = cuda.gridDim.x * cuda.blockDim.x
-    gridY = cuda.gridDim.y * cuda.blockDim.y
-    for i in range(startX, rows, gridX):
-        for j in range(startY, cols, gridY):
-            numAlive = 0
-            for k in range(maxLen):
-                # if adjGrid is configured, a placeholder value of dim
-                # will result in a 0 being looked up (as desired)
-                numAlive += grid[adjGrid[i,j,k,0], adjGrid[i,j,k,1]]
-            if numAlive == 3 or (numAlive == 2 and grid[i,j] == 1):
-                newGrid[i,j] = 1
+# @cuda.jit(argtypes=[uint8[:,:], uint32[:,:,:,:], uint8[:,:]])
+# def evolve2D_kernel(grid, adjGrid, newGrid):
+#     """ Like evolve, but only compatible with 2D arrays. Uses loops rather than
+#         iterators, so hopefully easier to parallelize. Assumes grid and adjGrid
+#         are what they should be for dim = dimArr[0:1] (AND ARE CONFIGURED.)
+#         dimArr is [rows, cols, maxLen] """
+#     rows = grid.shape[0] - 1
+#     maxLen = adjGrid.shape[2]
+#     cols = grid.shape[1] - 1
+#     startX, startY = cuda.grid(2)
+#     gridX = cuda.gridDim.x * cuda.blockDim.x
+#     gridY = cuda.gridDim.y * cuda.blockDim.y
+#     for i in range(startX, rows, gridX):
+#         for j in range(startY, cols, gridY):
+#             numAlive = 0
+#             for k in range(maxLen):
+#                 # if adjGrid is configured, a placeholder value of dim
+#                 # will result in a 0 being looked up (as desired)
+#                 numAlive += grid[adjGrid[i,j,k,0], adjGrid[i,j,k,1]]
+#             if numAlive == 3 or (numAlive == 2 and grid[i,j] == 1):
+#                 newGrid[i,j] = 1
     
 class Game:
     """ Initializes the game of life.
