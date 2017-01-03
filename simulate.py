@@ -45,20 +45,22 @@ class FDSCP:
         self.payoffMatrix = payoffMatrix
         self.adjGrid = initAdjGrid(adjFunc, self.dim, extraSpace)
         self.grid = grid
-        self.dualAdjGrid = dual(self.dim, self.adjGrid)
-        self.fitnesses = self.initFitnesses()
-        self.totEdgeProb = np.sum(self.fitnesses)
+        self.init()
 
     #TODO: Make sure this will actually work (especially with adjGrid having a buffer)
     #TODO: Make this more efficient (by creating backwards adjGrid)
     def initFitnesses(self):
-        fitnesses = np.zeros(self.grid.shape, dtype=np.complex128)
+        fitnesses = np.zeros(self.dim, dtype=np.complex128)
         it = np.nditer(fitnesses, flags=['multi_index'])
         while not it.finished:
             fitnesses[it.multi_index] = self.computeFitness(it.multi_index)
+            it.iternext()
         return fitnesses
 
-
+    def init(self):
+        self.dualAdjGrid = dual(self.dim, self.adjGrid)
+        self.fitnesses = self.initFitnesses()
+        self.totFitness = np.sum(self.fitnesses)
 
     def computeFitness(self, loc):
         """ Computes the fitness of the individual at location loc. """
@@ -71,11 +73,24 @@ class FDSCP:
     def update(self, loc, old, new):
         """ Updates fitnesses and edge probabilities when the individual at loc changes
             type from old to new """
-        for connLoc in self.dualAdjGrid[loc]:
-            if connLoc == self.dim:
+        l = tuple(loc)
+        # update fitnesses of all of loc's neighbors
+        for connLoc in self.dualAdjGrid[l]:
+            if (connLoc == self.dim).all():
                 continue
-            self.fitnesses[connLoc] += self.payoffMatrix[self.grid[connLoc]][new]
-            self.fitnesses[connLoc] -= self.payoffMatrix[self.grid[connLoc]][old]
+            cl = tuple(connLoc)
+            diff = self.payoffMatrix[self.grid[cl]][new] - self.payoffMatrix[self.grid[cl]][old]
+            self.fitnesses[cl] += diff
+            self.totFitness += diff
+        # update fitness of loc itself
+        self.totFitness -= self.fitnesses[l]
+        self.fitnesses[l] = 0
+        for connLoc in self.adjGrid[l]:
+            cl = tuple(connLoc)
+            self.fitnesses[tuple(loc)] += self.payoffMatrix[new][self.grid[cl]]
+
+        self.totFitness += self.fitnesses[l]
+            
 
     def getRandInd(self):
         """ Gets a random individual in the adjacency grid, with probability
@@ -87,7 +102,10 @@ class FDSCP:
         while not it.finished:
             currProb += self.fitnesses[it.multi_index]
             if currProb >= prob:
+                print(currProb)
+                print(prob)
                 return it.multi_index
+            it.iternext()
 
         raise ValueError("Invalid total edge probability.")
 
@@ -96,15 +114,21 @@ class FDSCP:
             Works for grids of any dimension, but may be slower."""
         # individual that gets to reproduce
         ind = self.getRandInd()
+        print(self.grid[tuple(ind)])
+        #print(self.fitnesses)
+        #print(self.totFitness)
         # individual we are going to replace
         replace = self.adjGrid[ind + (np.random.randint(0, len(self.adjGrid[ind])),)]
-        oldType = self.grid[replace]
+        while (replace == self.dim).all():
+            replace = self.adjGrid[ind + (np.random.randint(0, len(self.adjGrid[ind])),)]
+        oldType = self.grid[tuple(replace)]
         r = np.random.random()
-        if r <= self.fitnesses[e[0]].real / cNorm(self.fitnesses[e[0]]):
-            self.grid[replace] = e[0]
+        if r <= self.fitnesses[ind].real / cNorm(self.fitnesses[ind]):
+            self.grid[tuple(replace)] = self.grid[ind]
         else:
-            self.grid[replace] = (not e[0])
-        self.update(replace, oldType, self.grid[replace])
+            raise ValueError("This is impossible")
+            self.grid[tuple(replace)] = 1 - self.grid[ind]
+        self.update(replace, oldType, self.grid[tuple(replace)])
 
 
 """ Below are a variety of adjacency functions, which can be used
@@ -215,7 +239,7 @@ def initAdjGrid(adjFunc, dim, extraSpace):
         it.iternext()
     return adjGrid
 
-@autojit
+#@autojit
 def getHubs(numHubs, ldim, adjGridShape):
     hubs = np.empty((len(numHubs), ldim))
     
@@ -235,7 +259,7 @@ def getHubs(numHubs, ldim, adjGridShape):
     
     return hubs
 
-@autojit
+#@autojit
 def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True):
     """ Turns the adjacency grid into a small-world network.
         This works as follows: for each edge, we rewire it into
@@ -256,7 +280,7 @@ def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True)
     hubs = getHubs(np.random.choice(numVertices, (1 - heterogeneity) * numVertices, replace=False), ldim, adjGrid.shape)
     
     
-    print("Number of hubs: " + len(hubs))
+    print("Number of hubs: " + str(len(hubs)))
 
     while not it.finished:
         # only consider left-facing edges (plus down) - that way we

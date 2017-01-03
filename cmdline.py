@@ -42,18 +42,18 @@ from numba import *
 #     return grid
 
     
-def run(game, steps, delay, initDelay, printInd, indSteps):
+def run(fdscp, steps, delay, initDelay, printInd, indSteps):
     """ Runs the Command-Line interface for a specified number of steps,
         or forever if the number of steps is specified to be -1."""
     step = 0
     while step < steps or steps == -1:
         # print grid
         if printInd is not -1 and step % printInd is 0:
-            printGrid(game.grid, step, game.dim)
+            printGrid(fdscp.grid, step, fdscp.dim)
         # print index
         if indSteps is not -1 and step % indSteps is 0:
             print("Step = " + str(step))
-        game.evolve2D_self()
+        fdscp.evolve()
         sleep(delay)
         if step == 0:
             # allow initial position to be more easily visible
@@ -73,10 +73,10 @@ def printGrid(grid, step, dim, file=None):
     grid_str = ""
     if step is not -1:
         grid_str += "STEP: " + str(step) + "\n"
-    grid_str += horizontalLine(dim[1]-1)
-    for i in range(dim[0]-1):
+    grid_str += horizontalLine(dim[1])
+    for i in range(dim[0]):
         grid_str += "|"
-        for j in range(dim[1]-1):
+        for j in range(dim[1]):
             if grid[i][j]:
                 grid_str += "X"
             else:
@@ -84,7 +84,7 @@ def printGrid(grid, step, dim, file=None):
         grid_str += "|\n"
     # cross-platform way to clear command prompt, for the next round of
     # printing the grid
-    grid_str += horizontalLine(dim[1]-1)
+    grid_str += horizontalLine(dim[1])
     if file is None:
         os.system('cls' if os.name == 'nt' else 'clear')
         print(grid_str)

@@ -94,7 +94,8 @@ def main():
     start = timer()
     dim = np.array([args.rows,args.cols])
     grid = genRandGrid(dim, prob=args.frac)
-    payoffMatrix = np.array([[0,1],[1j,2]], dtype = np.complex128)
+    #np.array([[0,0,0,0,0],[0,1,0,1,0],[0,1,0,1,0],[0,1,1,0,0],[0,0,0,0,0]], dtype=np.int8)
+    payoffMatrix = np.array([[1j,1j],[1,1]], dtype = np.complex128)
     fdscp = FDSCP(dim, payoffMatrix, torusAdjFunc, args.extraspace, grid)
     if args.debug:
         print("Initialized simulation. Time elapsed: " + str(timer() - start))
@@ -111,13 +112,16 @@ def main():
         strswc = str(round(swc, 6))
         if args.debug:
             print("SWC = " + strswc + ". Time elapsed: " + str(timer() - start))
+            #print(fdscp.adjGrid)
         smallWorldIfyHeterogeneous(fdscp.adjGrid, swc, args.heterogeneity, args.replace)
         if args.debug:
-            print(fdscp.adjGrid)
+            #print(fdscp.adjGrid)
             print("Grid smallworldified. Time elapsed: " + str(timer() - start))
         # these will be arrays of the values for every simulation
         livecells = np.zeros(args.niters)
         cl = np.zeros(args.niters)
+        fdscp.init()
+        
         # run the simulation on this many different, random grids
         for sim in range(args.niters):
             if args.debug:
@@ -129,13 +133,13 @@ def main():
                 outfile_steps.writelines("Step  LiveCells Cluster\n")
             # reset grid to fresh state
             fdscp.grid = genRandGrid(dim, prob=args.frac)
+            fdscp.init()
             grid = fdscp.grid
             if args.debug:
                 print("Grid reset. Time elapsed: " + str(timer() - start))
             steps = args.simlength
             if args.output < 3:
-                grid = run_GPU(fdscp.grid, fdscp.adjGrid, steps, args.delay, 0,
-                               args.visible, -1)
+                run(fdscp, steps, args.delay, 0, args.visible, -1)
             else:
                 for step in range(steps//args.sample + 1):
                     if args.debug:
@@ -143,7 +147,7 @@ def main():
                     # output data to file
                     outfile_steps.writelines(str(step * args.sample) + "    " + str(countLiveCells(grid)) + "    " + str(cluster(grid, fdscp.adjGrid)) + "\n")
                     # step once
-                    # grid = run_GPU(fdscp.grid, fdscp.adjGrid, args.sample, args.delay, 0, args.visible, -1)
+                    run(fdscp, args.sample, args.delay, 0, args.visible, -1)
                     fdscp.update()
                     # make file, and output grid to that file
                     if args.output >= 4:
