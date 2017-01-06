@@ -200,3 +200,16 @@ def initEdgeProbs(self):
             cNorm(self.fitnesses[it.multi_index[0:len(it.multi_index)-2]]) *\,
             cNorm(self.fitnesses[self.adjGrid[it.multi_index]])
     return edgeProbs
+
+    it = np.nditer(self.fitnesses, flags = ['multi_index'])
+        prob = np.random.random() * self.totFitness
+        currProb = 0
+        while not it.finished:
+            currProb += self.fitnesses[it.multi_index]
+            if currProb >= prob:
+                #print(currProb)
+                #print(prob)
+                return it.multi_index
+            it.iternext()
+
+        raise ValueError("Invalid total edge probability.")

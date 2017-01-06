@@ -19,7 +19,7 @@ def cluster(grid, adjGrid):
         grid is completely random, then this should roughly equal 1 - 2f + 2f^2,
         where f is the fraction of live cells. """
     if countLiveCells(grid) == 0:
-        return 0 # nothing is alive; cluster is 0
+        return -1 # nothing is alive; return as such
     it = np.nditer(grid, flags=['multi_index'])
     matches = 0 # number of neighbors of live cells that are live
     total = 0 # total number of neighbors of live cells

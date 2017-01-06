@@ -6,14 +6,16 @@ from numba import *
 import numpy as np
 from timeit import default_timer as timer
 from random import randrange
+from operator import mul
 
 
 def cNorm(a):
     return a.real + a.imag
 
 def dual(dim, adjGrid):
+    # create an array with the same shape as grid
     iter_arr = np.zeros(adjGrid.shape[0:len(adjGrid.shape) - 1])
-    dualAdjGrid = np.zeros(adjGrid.shape)
+    dualAdjGrid = np.zeros(adjGrid.shape, dtype=np.int32)
     currentPos = np.zeros(dim, dtype=np.int8)
     it = np.nditer(iter_arr, flags=['multi_index'])
     while not it.finished:
@@ -25,27 +27,37 @@ def dual(dim, adjGrid):
             # print(currentPos[pos])
             # print(dualAdjGrid.shape)
             dualAdjGrid[tuple(adjGrid[it.multi_index])][currentPos[pos]] = pos
-        currentPos[pos] += 1
+            currentPos[pos] += 1
         it.iternext()
     # fill the rest of the dual adjGrid with 'blank' values
     it = np.nditer(iter_arr, flags=['multi_index'])
     while not it.finished:
         pos = it.multi_index[0:len(dim)]
-        while currentPos[pos] < adjGrid.shape[len(adjGrid.shape) - 1]:
+        while currentPos[pos] < adjGrid.shape[len(adjGrid.shape) - 2]:
             dualAdjGrid[tuple(adjGrid[it.multi_index])][currentPos[pos]] = dim
             currentPos[pos] += 1
         it.iternext()
+
+    #TODO: this second loop doesn't work
     return dualAdjGrid
 
+def unFlatten(ind, dim):
+    """ Turns an index of a raveled array back into the unraveled verison. Assumes 2D array """
+    return ((int)(ind / dim[1]), ind % dim[1])
 
 """ Code for initializing fitness values for each location in grid."""
 class FDSCP:
-    def __init__(self, dim, payoffMatrix, adjFunc, extraSpace, grid):
+    def __init__(self, dim, payoffMatrix, adjGrid, grid):
         self.dim = dim
         self.payoffMatrix = payoffMatrix
-        self.adjGrid = initAdjGrid(adjFunc, self.dim, extraSpace)
+        self.adjGrid = adjGrid
         self.grid = grid
+        self.totElements = 1
+        for i in range(len(self.dim)):
+            self.totElements *= self.dim[i]
+        self.dualAdjGrid = dual(self.dim, self.adjGrid)
         self.init()
+
 
     #TODO: Make sure this will actually work (especially with adjGrid having a buffer)
     #TODO: Make this more efficient (by creating backwards adjGrid)
@@ -58,9 +70,19 @@ class FDSCP:
         return fitnesses
 
     def init(self):
-        self.dualAdjGrid = dual(self.dim, self.adjGrid)
         self.fitnesses = self.initFitnesses()
-        self.totFitness = np.sum(self.fitnesses)
+        self.numMutants = 0
+        it = np.nditer(self.grid, flags = ['multi_index'])
+        while not it.finished:
+            if (it.multi_index != self.dim).any():
+                self.numMutants += it[0]
+            it.iternext()
+        self.gridRavel = np.ravel(self.grid)
+        self.fitnessReal = np.array(list(map(cNorm,self.fitnesses)))
+        self.fitnessRavel = np.ravel(self.fitnessReal)
+        self.totFitness = np.sum(self.fitnessReal)
+        self.indList = np.arange(len(self.fitnessRavel))
+        
 
     def computeFitness(self, loc):
         """ Computes the fitness of the individual at location loc. """
@@ -71,50 +93,58 @@ class FDSCP:
         return payoff
 
     def update(self, loc, old, new):
+        #TODO: Make totFitness work for complex payoffs
         """ Updates fitnesses and edge probabilities when the individual at loc changes
             type from old to new """
-        l = tuple(loc)
+        loc = tuple(loc)
+        # nothing changed
+        if old == new:
+            return
+        # a new mutant (1) was born
+        if old < new:
+            self.numMutants += 1
+        # a mutant was replaced
+        if old > new:
+            self.numMutants -= 1
         # update fitnesses of all of loc's neighbors
-        for connLoc in self.dualAdjGrid[l]:
+        for connLoc in self.dualAdjGrid[loc]:
             if (connLoc == self.dim).all():
                 continue
             cl = tuple(connLoc)
             diff = self.payoffMatrix[self.grid[cl]][new] - self.payoffMatrix[self.grid[cl]][old]
             self.fitnesses[cl] += diff
-            self.totFitness += diff
+            oldReal = self.fitnessReal[cl]
+            self.fitnessReal[cl] = cNorm(self.fitnesses[cl])
+            self.totFitness += self.fitnessReal[cl] - oldReal
         # update fitness of loc itself
-        self.totFitness -= self.fitnesses[l]
-        self.fitnesses[l] = 0
-        for connLoc in self.adjGrid[l]:
+        self.totFitness -= self.fitnessReal[loc]
+        self.fitnesses[loc] = 0
+        self.fitnessReal[loc] = 0
+        for connLoc in self.adjGrid[loc]:
+            if (connLoc == self.dim).all():
+                continue
             cl = tuple(connLoc)
-            self.fitnesses[tuple(loc)] += self.payoffMatrix[new][self.grid[cl]]
-
-        self.totFitness += self.fitnesses[l]
+            self.fitnesses[loc] += self.payoffMatrix[new][self.grid[cl]]
+        
+        self.fitnessReal[loc] += cNorm(self.fitnesses[loc])
+        self.totFitness += self.fitnessReal[loc]
             
 
     def getRandInd(self):
         """ Gets a random individual in the adjacency grid, with probability
             proportional to that edge's fitness """
+        # TODO: make new array with CNorm already done to save compute time
+        return np.random.choice(self.indList, p=self.fitnessRavel/self.totFitness)
         
-        it = np.nditer(self.fitnesses, flags = ['multi_index'])
-        prob = np.random.random() * self.totFitness
-        currProb = 0
-        while not it.finished:
-            currProb += self.fitnesses[it.multi_index]
-            if currProb >= prob:
-                print(currProb)
-                print(prob)
-                return it.multi_index
-            it.iternext()
-
-        raise ValueError("Invalid total edge probability.")
-
     def evolve(self):
         """ The original evolve function.
             Works for grids of any dimension, but may be slower."""
+        # simulation finished - one of the species has gone to fixation
+        if (self.numMutants == 0) or (self.numMutants == self.totElements):
+            return 1
         # individual that gets to reproduce
-        ind = self.getRandInd()
-        print(self.grid[tuple(ind)])
+        ind = unFlatten(self.getRandInd(), self.dim)
+        # print(self.grid[tuple(ind)])
         #print(self.fitnesses)
         #print(self.totFitness)
         # individual we are going to replace
@@ -126,9 +156,10 @@ class FDSCP:
         if r <= self.fitnesses[ind].real / cNorm(self.fitnesses[ind]):
             self.grid[tuple(replace)] = self.grid[ind]
         else:
-            raise ValueError("This is impossible")
+            # print('Complex')
             self.grid[tuple(replace)] = 1 - self.grid[ind]
         self.update(replace, oldType, self.grid[tuple(replace)])
+        return 0
 
 
 """ Below are a variety of adjacency functions, which can be used
@@ -278,9 +309,6 @@ def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True)
     
     numVertices = np.prod(adjGrid.shape[0:ldim])
     hubs = getHubs(np.random.choice(numVertices, (1 - heterogeneity) * numVertices, replace=False), ldim, adjGrid.shape)
-    
-    
-    print("Number of hubs: " + str(len(hubs)))
 
     while not it.finished:
         # only consider left-facing edges (plus down) - that way we
@@ -427,13 +455,10 @@ def smallWorldIfy(adjGrid, jumpProb):
     
 def getRandLoc(dim, loc=None):
     """ Generates a random location in the grid, that isn't loc. """
-    newLoc = tuple(np.random(0, dim[i]) for i in range(len(dim)))
+    newLoc = tuple(np.random.randint(0, dim[i]) for i in range(len(dim)))
     while newLoc == loc:
         newLoc = tuple(np.random.randint(0, dim[i]) for i in range(len(dim)))
     return newLoc
-
-
-
 
 def genRandGrid(dim, prob=0.5):
     """ Generates a random grid with a given cell density. """
@@ -443,6 +468,16 @@ def genRandGrid(dim, prob=0.5):
     intGrid[alive] = 1
     return intGrid
 
+def genRandGridNum(dim, num=0):
+    numLeft = num
+    grid = np.zeros(tuple(dim+1), dtype=np.int8)
+    while numLeft > 0:
+        loc = getRandLoc(dim)
+        while grid[loc] == 1:
+            loc = getRandLoc(dim)
+        grid[loc] = 1
+        numLeft -= 1
+    return grid
 
 def gridToStr2D(grid):
     """ Returns a string representation of grid, ignoring first row and column. OUT OF DATE """

@@ -4,6 +4,7 @@ import numpy as np
 #from gameoflife import evolve2D, evolve2D_kernel
 from time import sleep
 from numba import *
+from simulate import cNorm
 #from numbapro import cuda
 
 # def run_GPU(grid, adjGrid, steps, delay, initDelay, printInd, indSteps):
@@ -41,8 +42,7 @@ from numba import *
 #     d_grid.to_host()
 #     return grid
 
-    
-def run(fdscp, steps, delay, initDelay, printInd, indSteps):
+def run(fdscp, steps, delay, initDelay, printInd, indSteps, debug=False):
     """ Runs the Command-Line interface for a specified number of steps,
         or forever if the number of steps is specified to be -1."""
     step = 0
@@ -52,9 +52,15 @@ def run(fdscp, steps, delay, initDelay, printInd, indSteps):
             printGrid(fdscp.grid, step, fdscp.dim)
         # print index
         if indSteps is not -1 and step % indSteps is 0:
-            print("Step = " + str(step))
-        fdscp.evolve()
-        sleep(delay)
+            print("Step = " + str(step) + ", mutants = " + str(fdscp.numMutants))
+            if debug:
+                assert((fdscp.initFitnesses() == fdscp.fitnesses).all())
+                assert((fdscp.fitnessReal == np.array(list(map(cNorm,fdscp.fitnesses)))).all())
+        # we are at fixation
+        if fdscp.evolve():
+            break
+        if delay > 0:
+            sleep(delay)
         if step == 0:
             # allow initial position to be more easily visible
             sleep(initDelay)

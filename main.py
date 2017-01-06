@@ -13,8 +13,10 @@ import os
 parser = argparse.ArgumentParser(description="Game of Life Analysis Frontend",
                                  epilog="")
 
-parser.add_argument('-f', '--frac', help="Fraction of cells alive at beginning",
+parser.add_argument('-f', '--frac', help="Fraction of mutant cells at beginning",
                     type=float, default=0.35) #
+parser.add_argument('-m', '--initMutant', help="Number of mutant cells at beginning. Overrides -f.",
+                    type=int, default=-1)
 parser.add_argument('-r', '--rows', help="Number of rows of the grid",
                     type=int, default=32) #
 parser.add_argument('-c', "--cols", help="Number of columns of the grid",
@@ -62,6 +64,13 @@ parser.add_argument('-d', "--delay", help="Time delay between steps",
 parser.add_argument('-db', "--debug", help="Enter debug mode",
                     action='store_true', default=False)
 
+parser.add_argument('-aa', "--aa", help="Fitness of A when interacting with A", type=float, default=0)
+
+parser.add_argument('-ab', "--ab", help="Fitness of A/B when interacting with B/A", type=float, default=1)
+
+parser.add_argument('-bb', "--bb", help="Fitness of B when interacting with B", type=float, default=2)
+
+
 parser.add_argument('-s', "--sample", help="When using output modes 3 or 4, how often should the grid be sampled?",
                     type=int, default=10)
 
@@ -88,67 +97,72 @@ if args.output >= 1:
     # this file stores averages of final values across all simulations per swc
     outfile_avg = open(args.outfile + folder + "data1/" + datestr + ".txt", "w")
     # will be structured as a table with these 5 columns
-    outfile_avg.writelines("SWC  LiveCells Std Cluster Std\n")
+    outfile_avg.writelines("SWC  mutants Std Cluster Std\n")
 
 def main():
     start = timer()
     dim = np.array([args.rows,args.cols])
-    grid = genRandGrid(dim, prob=args.frac)
-    #np.array([[0,0,0,0,0],[0,1,0,1,0],[0,1,0,1,0],[0,1,1,0,0],[0,0,0,0,0]], dtype=np.int8)
-    payoffMatrix = np.array([[1j,1j],[1,1]], dtype = np.complex128)
-    fdscp = FDSCP(dim, payoffMatrix, torusAdjFunc, args.extraspace, grid)
+    payoffMatrix = np.array([[args.bb,args.ab*1j],[args.ab,args.aa]], dtype = np.complex128)
+    adjGrid = initAdjGrid(torusAdjFunc, dim, args.extraspace)
     if args.debug:
+        print("payoff matrix:")
+        print(payoffMatrix)
         print("Initialized simulation. Time elapsed: " + str(timer() - start))
-    # original torus adjacency grid, to be used as fresh template for
-    # smallworld
-    origAdjGrid = np.copy(fdscp.adjGrid)
+    # original torus adjacency grid, to be used as fresh template for small-world
+    origAdjGrid = np.copy(adjGrid)
     # amount of small-world-ification to do
     swc = args.minswc
     # "fudge factor" needed because decimals are weird
-    # TODO: Remove cuda until needed
     while swc <= args.maxswc + 0.0000000001:
+        if args.initMutant == -1:
+            grid = genRandGrid(dim, prob=args.frac)
+        else:
+            grid = genRandGridNum(dim, num=args.initMutant)
         # changing small-world-ification; need to re-do smallWorldIfy
-        fdscp.adjGrid = np.copy(origAdjGrid)
+        adjGrid = np.copy(origAdjGrid)
         strswc = str(round(swc, 6))
         if args.debug:
             print("SWC = " + strswc + ". Time elapsed: " + str(timer() - start))
             #print(fdscp.adjGrid)
-        smallWorldIfyHeterogeneous(fdscp.adjGrid, swc, args.heterogeneity, args.replace)
+        smallWorldIfyHeterogeneous(adjGrid, swc, args.heterogeneity, args.replace)
         if args.debug:
             #print(fdscp.adjGrid)
             print("Grid smallworldified. Time elapsed: " + str(timer() - start))
         # these will be arrays of the values for every simulation
-        livecells = np.zeros(args.niters)
+        mutants = np.zeros(args.niters)
         cl = np.zeros(args.niters)
-        fdscp.init()
+        fdscp = FDSCP(dim, payoffMatrix, adjGrid, grid)
         
         # run the simulation on this many different, random grids
         for sim in range(args.niters):
+            print("Running simulation: " + str(sim))
             if args.debug:
                 print("Sim = " + str(sim) + ". Time elapsed: " + str(timer() - start))
             # make file to output live cell count and cluster every step
             if args.output >= 3:
                 outfile_steps = open(args.outfile + folder + "data3/" + "swc=" + strswc +\
                     "_sim=" + str(sim) + datestr + ".txt", "w")
-                outfile_steps.writelines("Step  LiveCells Cluster\n")
+                outfile_steps.writelines("Step  mutants Cluster\n")
             # reset grid to fresh state
-            fdscp.grid = genRandGrid(dim, prob=args.frac)
+            if args.initMutant == -1:
+                grid = genRandGrid(dim, prob=args.frac)
+            else:
+                grid = genRandGridNum(dim, num=args.initMutant)
+            fdscp.grid = grid
             fdscp.init()
-            grid = fdscp.grid
             if args.debug:
                 print("Grid reset. Time elapsed: " + str(timer() - start))
             steps = args.simlength
             if args.output < 3:
-                run(fdscp, steps, args.delay, 0, args.visible, -1)
+                run(fdscp, steps, args.delay, 0, args.visible, 1000, args.debug)
             else:
-                for step in range(steps//args.sample + 1):
+                for step in range(steps/args.sample + 1):
                     if args.debug:
                         print("Step = " + str(step) + " Time elapsed: " + str(timer() - start))
                     # output data to file
                     outfile_steps.writelines(str(step * args.sample) + "    " + str(countLiveCells(grid)) + "    " + str(cluster(grid, fdscp.adjGrid)) + "\n")
                     # step once
                     run(fdscp, args.sample, args.delay, 0, args.visible, -1)
-                    fdscp.update()
                     # make file, and output grid to that file
                     if args.output >= 4:
                         outfile_grids = open(args.outfile + folder + "data4/" + "swc=" + strswc + "_sim=" + str(sim) + "_step=" + str(step * args.sample) + datestr + ".txt", "w")
@@ -160,33 +174,46 @@ def main():
             if args.debug:
                 print("Simulation finished. Time elapsed: " + str(timer() - start))
 
-            livecells[sim] = countLiveCells(grid)
+            mutants[sim] = countLiveCells(grid)
             cl[sim] = cluster(grid, fdscp.adjGrid)
             
             if args.debug:
                 print("Finished computing live cells and clustering. Time elapsed: " + str(timer() - start))
 
-        avglc = round(np.mean(livecells), 3)
-        avgcl = round(np.mean(cl), 6)
-        stdlc = round(np.std(livecells), 3)
-        stdcl = round(np.std(cl), 6)
+        # calculate mean clustering of situations where mutant didn't go extinct
+        cl_new = []
+        for c in cl:
+            # WT went to fixation - ignore this case
+            if c == -1:
+                continue
+            cl_new.append(c)
+        
+        avgcl = 0
+        stdcl = 0
+        avglc = round(np.mean(mutants), 3)
+        stdlc = round(np.std(mutants), 3)
+        if len(cl_new) > 0:
+            avgcl = round(np.mean(cl_new), 6)
+            stdcl = round(np.std(cl_new), 6)
         if args.output >= 1:
             outfile_avg.writelines(strswc + "    " + str(avglc) + "    " + str(stdlc) + "    " + str(avgcl) + "    " + str(stdcl) + "\n")
-
+        if args.debug:
+            print("Output: " + strswc + "    " + str(avglc) + "    " + str(stdlc) + "    " + str(avgcl) + "    " + str(stdcl))
+        print("Mutant final population sizes: " + str(mutants))
         # make and output file of range of different final values in
         # simulations
         if args.output >= 2:
             outfile_final = open(args.outfile + folder + "data2/" + "swc=" + strswc + datestr + ".txt", "w")
-            outfile_final.writelines("Run  LiveCells  Cluster\n")
-            for i in range(len(livecells)):
-                outfile_final.writelines(str(i) + "    " + str(livecells[i]) + "    " + str(round(cl[i], 6)) + "\n")
+            outfile_final.writelines("Run  mutants  Cluster\n")
+            for i in range(len(mutants)):
+                outfile_final.writelines(str(i) + "    " + str(mutants[i]) + "    " + str(round(cl[i], 6)) + "\n")
             outfile_final.close()
         swc += args.stepswc
 
         if args.debug:
             print("Finished outputting everything to files. Time elapsed: " + str(timer() - start))
-
-    outfile_avg.close()
+    if args.output >= 1:
+        outfile_avg.close()
 
 if __name__ == '__main__':
     main()
