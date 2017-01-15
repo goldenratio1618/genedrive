@@ -97,3 +97,11 @@ def printGrid(grid, step, dim, file=None):
         sys.stdout.flush()
     else:
         file.writelines(grid_str)
+
+def parseGraph(graph):
+    adjGridDict = {}
+    for line in graph:
+        start,end=line.split(",")
+        adjGridDict[int(start)] = int(end)
+    grid = np.arange(max(max(adjGridDict.keys()), max(adjGridDict.values())))
+    #TODO: turn adjGridDict into a Numpy array

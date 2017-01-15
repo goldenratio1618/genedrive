@@ -8,7 +8,7 @@ from timeit import default_timer as timer
 from random import randrange
 from operator import mul
 
-
+#TODO: Implement grid-loading function
 def cNorm(a):
     return a.real + a.imag
 

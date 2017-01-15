@@ -76,6 +76,15 @@ parser.add_argument('-s', "--sample", help="When using output modes 3 or 4, how 
 
 parser.add_argument('-of', "--outfile", help="Output file to store data in", default="D:/OneDrive/Documents/genedrive_data/")
 
+parser.add_argument('-gr', "--graphFile",
+                    help=("Name of file containing graph structure. If blank, loads Cartesian graph.\n"
+                    "If enabled, this setting will override the row and column arguments.\n"
+                    "This graph will still be small-worldified - if this is not desired, set small world coefficient to 0.\n"
+                    "File should be structured as a sequence of lines A,B. Here A and B are vertices, and this line represents an edge from A to B.\n"
+                    "There is currently no way to represent weighted graphs with this simulation.\n"
+                    "This may be added in a future update."),
+                    default="")
+
 args = parser.parse_args()
 
 start = datetime.datetime.now()
@@ -91,6 +100,11 @@ datestr = "frac=" + str(args.frac) + "_rows=" + str(args.rows) + "_cols=" + \
     str(args.niters) + "_simlength=" + str(args.simlength) + "_replace=" + \
     str(args.replace) + "_heterogeneity=" + str(args.heterogeneity)
 
+adjGrid = None
+if args.graphFile != '':
+    graph = open(args.graphFile, 'r').readlines()
+    adjGrid = parseGraph(graph)
+
 np.set_printoptions(threshold=np.inf)
     
 if args.output >= 1:
@@ -103,7 +117,9 @@ def main():
     start = timer()
     dim = np.array([args.rows,args.cols])
     payoffMatrix = np.array([[args.bb,args.ab*1j],[args.ab,args.aa]], dtype = np.complex128)
-    adjGrid = initAdjGrid(torusAdjFunc, dim, args.extraspace)
+    if adjGrid is not None:
+        adjGrid = initAdjGrid(torusAdjFunc, dim, args.extraspace)
+
     if args.debug:
         print("payoff matrix:")
         print(payoffMatrix)
