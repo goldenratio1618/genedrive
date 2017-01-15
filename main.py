@@ -10,7 +10,7 @@ import argparse
 import datetime
 import os
 
-parser = argparse.ArgumentParser(description="Game of Life Analysis Frontend",
+parser = argparse.ArgumentParser(description="Gene Drive Analysis Frontend",
                                  epilog="")
 
 parser.add_argument('-f', '--frac', help="Fraction of mutant cells at beginning",
