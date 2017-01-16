@@ -22,7 +22,7 @@ def TF(i, a, b, c, n):
     return i * (a * (i - 1) + b * (n - i)) + (n - i) * (c * (n - i - 1) + b * i)
 
 
-def fixProb(i, a, b, c, n):
+def fixProb(i, a, b, c, n, debug=False):
     """ Computes the fixation probability of the mutant strain given i initial mutants """
     alpha_1 = P(1, 2, a, b, c, n) / (1 - P(1, 1, a, b, c, n))
     # this will store the value of alpha_j
@@ -32,19 +32,20 @@ def fixProb(i, a, b, c, n):
         prod = alpha_1
     else:
         prod = 1
-    print("j = 1, alpha = " + str(alpha) + ", prod = " + str(prod))
+    if debug:
+        print("j = 1, alpha = " + str(alpha) + ", prod = " + str(prod))
     
     for j in range(2,n):
         # compute alpha_j
         alpha = P(j, j + 1, a, b, c, n) / (1 - alpha * P(j, j - 1, a, b, c, n) - P(j, j, a, b, c, n))
         if j >= i:
             prod *= alpha
-        if j % 100 == 0 or j < 100:
+        if debug and (j % 100 == 0 or j < 100):
             print("j = " + str(j) + ", alpha = " + str(alpha) + ", prod = " + str(prod))
     return prod
 
 def main(args):
-    print("Fixation probability = " + str(fixProb(args.i, args.a, args.b, args.c, args.n)))
+    print("Fixation probability = " + str(fixProb(args.i, args.a, args.b, args.c, args.n, args.debug)))
     if args.plot == '':
         return
     if args.plot == 'i':
@@ -115,6 +116,8 @@ if __name__ == '__main__':
                         "If i or n is chosen, the plot range will be from the input value of i to the input value of n.\n"
                         "If a, b, or c is chosen, the plot range will be from 0 to the input value of that parameter."),
                         default="")
+
+    parser.add_argument('d', '--debug', help="Activates debug mode")
     
     parser.add_argument('-s', '--step', help="If plotting a, b, or c, this will represent the step size in the plot.",
                         type=int, default=0.1)
