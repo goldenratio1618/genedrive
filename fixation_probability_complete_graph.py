@@ -117,7 +117,8 @@ if __name__ == '__main__':
                         "If a, b, or c is chosen, the plot range will be from 0 to the input value of that parameter."),
                         default="")
 
-    parser.add_argument('d', '--debug', help="Activates debug mode")
+    parser.add_argument('d', '--debug', help="Activate debug mode (which prints alpha values)",
+                        action='store_true', default=False)
     
     parser.add_argument('-s', '--step', help="If plotting a, b, or c, this will represent the step size in the plot.",
                         type=int, default=0.1)
