@@ -14,6 +14,7 @@ def P(i, j, a, b, c, n):
         return (n - i) * c * (n - i - 1) / TF(i, a, b, c, n) * i / (n - 1)
     if j == i:
         return 1 - P(i, i + 1, a, b, c, n) - P(i, i - 1, a, b, c, n)
+    return 0
         
 
 def TF(i, a, b, c, n):
@@ -27,15 +28,23 @@ def fixProb(i, a, b, c, n):
     # this will store the value of alpha_j
     alpha = alpha_1
     # this will store the value of the product (which will equal the fixation probability)
-    prod = 1
-    for j in range(1,n):
+    if i <= 1:
+        prod = alpha_1
+    else:
+        prod = 1
+    print("j = 1, alpha = " + str(alpha) + ", prod = " + str(prod))
+    
+    for j in range(2,n):
+        # compute alpha_j
+        alpha = P(j, j + 1, a, b, c, n) / (1 - alpha * P(j, j - 1, a, b, c, n) - P(j, j, a, b, c, n))
         if j >= i:
             prod *= alpha
-        alpha = P(i + 1, i + 2, a, b, c, n) / (1 - alpha * P(i + 1, i, a, b, c, n) - P(i + 1, i + 1, a, b, c, n))
+        if j % 100 == 0 or j < 100:
+            print("j = " + str(j) + ", alpha = " + str(alpha) + ", prod = " + str(prod))
     return prod
 
 def main(args):
-    print(fixProb(args.i, args.a, args.b, args.c, args.n))
+    print("Fixation probability = " + str(fixProb(args.i, args.a, args.b, args.c, args.n)))
     if args.plot == '':
         return
     if args.plot == 'i':
