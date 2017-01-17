@@ -88,7 +88,7 @@ def printGrid(grid, step, dim, file=None):
             else:
                 grid_str += " "
         grid_str += "|\n"
-    # cross-platform way to clear command prompt, for the next round of
+    # cross-platform way to clear terminal, for the next round of
     # printing the grid
     grid_str += horizontalLine(dim[1])
     if file is None:
@@ -102,6 +102,18 @@ def parseGraph(graph):
     adjGridDict = {}
     for line in graph:
         start,end=line.split(",")
-        adjGridDict[int(start)] = int(end)
-    grid = np.arange(max(max(adjGridDict.keys()), max(adjGridDict.values())))
-    #TODO: turn adjGridDict into a Numpy array
+        if int(start) in adjGridDict.keys():
+            adjGridDict[int(start)].append(int(end))
+        else:
+            adjGridDict[int(start)] = [int(end)]
+    # add 1 to be consistent with other grid layout, which has dimension dim + 1
+    dim = max(max(adjGridDict.keys()), max(adjGridDict.values()))
+    grid = np.arange(dim + 1)
+    adjGrid = np.full((dim, max([len(a) for a in adjGridDict.values()]), 1), dim, dtype=np.int32)
+    it = np.nditer(adjGrid, flags=['multi_index'])
+    while not it.finished:
+        if it.multi_index[0] in adjGridDict.keys() and it.multi_index[1] < len(adjGridDict[it.multi_index[0]]):
+            adjGrid[it.multi_index] = adjGridDict[it.multi_index[0]][it.multi_index[1]]
+        it.iternext()
+    return grid,adjGrid
+

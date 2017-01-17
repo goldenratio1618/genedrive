@@ -43,7 +43,12 @@ def dual(dim, adjGrid):
 
 def unFlatten(ind, dim):
     """ Turns an index of a raveled array back into the unraveled verison. Assumes 2D array """
-    return ((int)(ind / dim[1]), ind % dim[1])
+    if len(dim) == 1:
+        return ind
+    else if len(dim) == 2:
+        return ((int)(ind / dim[1]), ind % dim[1])
+    else:
+        raise ValueError("Only one and two dimensional graphs are supported.")
 
 """ Code for initializing fitness values for each location in grid."""
 class FDSCP:
@@ -163,7 +168,7 @@ class FDSCP:
 
 
 """ Below are a variety of adjacency functions, which can be used
-    to generate grids of various topologies for the Game of Life. """
+    to generate grids of various topologies for the grid. """
     
 def stdAdjFunc(coord, dim):
     """ Returns all adjacent locations to a given position.

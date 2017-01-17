@@ -101,9 +101,10 @@ datestr = "frac=" + str(args.frac) + "_rows=" + str(args.rows) + "_cols=" + \
     str(args.replace) + "_heterogeneity=" + str(args.heterogeneity)
 
 adjGrid = None
+grid = None
 if args.graphFile != '':
     graph = open(args.graphFile, 'r').readlines()
-    adjGrid = parseGraph(graph)
+    grid,adjGrid = parseGraph(graph)
 
 np.set_printoptions(threshold=np.inf)
     
@@ -115,7 +116,10 @@ if args.output >= 1:
 
 def main():
     start = timer()
-    dim = np.array([args.rows,args.cols])
+    if grid is None:
+        dim = np.array([args.rows,args.cols])
+    else:
+        dim = (len(grid),)
     payoffMatrix = np.array([[args.bb,args.ab*1j],[args.ab,args.aa]], dtype = np.complex128)
     if adjGrid is not None:
         adjGrid = initAdjGrid(torusAdjFunc, dim, args.extraspace)
