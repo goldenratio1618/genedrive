@@ -1,7 +1,6 @@
 ﻿from copy import deepcopy
 from math import floor
 import cmath
-#from cudatoolkit import cuda
 from numba import *
 import numpy as np
 from timeit import default_timer as timer
@@ -278,7 +277,7 @@ def initAdjGrid(adjFunc, dim, extraSpace):
         it.iternext()
     return adjGrid
 
-#@autojit
+@autojit
 def getHubs(numHubs, ldim, adjGridShape):
     hubs = np.empty((len(numHubs), ldim))
     
@@ -298,7 +297,7 @@ def getHubs(numHubs, ldim, adjGridShape):
     
     return hubs
 
-#@autojit
+@autojit
 def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True):
     """ Turns the adjacency grid into a small-world network.
         This works as follows: for each edge, we rewire it into
