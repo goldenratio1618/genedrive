@@ -1,46 +1,9 @@
 import os
 import sys
 import numpy as np
-#from gameoflife import evolve2D, evolve2D_kernel
 from time import sleep
 from numba import *
 from simulate import cNorm
-#from numbapro import cuda
-
-# def run_GPU(grid, adjGrid, steps, delay, initDelay, printInd, indSteps):
-#     """ Runs the Command-Line interface for a specified number of steps,
-#         or forever if the number of steps is specified to be -1.
-#         Note that here, grid and adjGrid must be explicitly specified as
-#         opposed to passed in as a Game, to enable everything to be run on the
-#         GPU. Returns the final grid state. """
-#     step = 0
-#     dim = grid.shape
-#     # move arrays to GPU
-#     d_grid = cuda.to_device(grid)
-#     d_adjGrid = cuda.to_device(adjGrid)
-#     blockDim = (32,16)
-#     gridDim = (32,8)
-#     while step < steps or steps == -1:
-#         # print grid
-#         if printInd is not -1 and step % printInd is 0:
-#             # in order to print grid, first need memory back in CPU
-#             d_grid.to_host()
-#             printGrid(grid, step, dim)
-#         # print index
-#         if indSteps is not -1 and step % indSteps is 0:
-#             print("Step = " + str(step))
-#         newGrid = np.zeros_like(grid)
-#         d_newGrid = cuda.to_device(newGrid)
-#         evolve2D_kernel[gridDim, blockDim](d_grid, d_adjGrid, d_newGrid)
-#         d_grid = d_newGrid
-#         grid = newGrid
-#         sleep(delay)
-#         if step == 0:
-#             # allow initial position to be more easily visible
-#             sleep(initDelay)
-#         step += 1
-#     d_grid.to_host()
-#     return grid
 
 def run(fdscp, steps, delay, initDelay, printInd, indSteps, debug=False):
     """ Runs the Command-Line interface for a specified number of steps,
@@ -100,20 +63,33 @@ def printGrid(grid, step, dim, file=None):
 
 def parseGraph(graph):
     adjGridDict = {}
+    dualAdjGridDict = {}
     for line in graph:
         start,end=line.split(",")
         if int(start) in adjGridDict.keys():
             adjGridDict[int(start)].append(int(end))
         else:
             adjGridDict[int(start)] = [int(end)]
+        
+        if int(start) in dualAdjGridDict.keys():
+            dualAdjGridDict[int(start)].append(int(end))
+        else:
+            dualAdjGridDict[int(start)] = [int(end)]
+    
     # add 1 to be consistent with other grid layout, which has dimension dim + 1
-    dim = max(max(adjGridDict.keys()), max(adjGridDict.values()))
-    grid = np.arange(dim + 1)
+    dim = max(max(adjGridDict.keys()), max([max(i) for i in adjGridDict.values()])) + 1
     adjGrid = np.full((dim, max([len(a) for a in adjGridDict.values()]), 1), dim, dtype=np.int32)
+    dualAdjGrid = np.full((dim, max([len(a) for a in dualAdjGridDict.values()]), 1), dim, dtype=np.int32)
     it = np.nditer(adjGrid, flags=['multi_index'])
     while not it.finished:
         if it.multi_index[0] in adjGridDict.keys() and it.multi_index[1] < len(adjGridDict[it.multi_index[0]]):
             adjGrid[it.multi_index] = adjGridDict[it.multi_index[0]][it.multi_index[1]]
         it.iternext()
-    return grid,adjGrid
+    
+    it = np.nditer(dualAdjGrid, flags=['multi_index'])
+    while not it.finished:
+        if it.multi_index[0] in dualAdjGridDict.keys() and it.multi_index[1] < len(dualAdjGridDict[it.multi_index[0]]):
+            dualAdjGrid[it.multi_index] = dualAdjGridDict[it.multi_index[0]][it.multi_index[1]]
+        it.iternext()
+    return dim,adjGrid,dualAdjGrid
 

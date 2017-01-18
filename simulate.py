@@ -44,15 +44,15 @@ def dual(dim, adjGrid):
 def unFlatten(ind, dim):
     """ Turns an index of a raveled array back into the unraveled verison. Assumes 2D array """
     if len(dim) == 1:
-        return ind
-    else if len(dim) == 2:
+        return (ind,)
+    elif len(dim) == 2:
         return ((int)(ind / dim[1]), ind % dim[1])
     else:
         raise ValueError("Only one and two dimensional graphs are supported.")
 
 """ Code for initializing fitness values for each location in grid."""
 class FDSCP:
-    def __init__(self, dim, payoffMatrix, adjGrid, grid):
+    def __init__(self, dim, payoffMatrix, adjGrid, grid, dualAdjGrid = None):
         self.dim = dim
         self.payoffMatrix = payoffMatrix
         self.adjGrid = adjGrid
@@ -60,7 +60,10 @@ class FDSCP:
         self.totElements = 1
         for i in range(len(self.dim)):
             self.totElements *= self.dim[i]
-        self.dualAdjGrid = dual(self.dim, self.adjGrid)
+        if dualAdjGrid is None:
+            self.dualAdjGrid = dual(self.dim, self.adjGrid)
+        else:
+            self.dualAdjGrid = dualAdjGrid
         self.init()
 
 
@@ -313,7 +316,7 @@ def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True)
     maxIndex = 3 ** ldim - 1
     
     numVertices = np.prod(adjGrid.shape[0:ldim])
-    hubs = getHubs(np.random.choice(numVertices, (1 - heterogeneity) * numVertices, replace=False), ldim, adjGrid.shape)
+    hubs = getHubs(np.random.choice(numVertices, int((1 - heterogeneity) * numVertices), replace=False), ldim, adjGrid.shape)
 
     while not it.finished:
         # only consider left-facing edges (plus down) - that way we
