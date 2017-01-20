@@ -10,6 +10,84 @@ import argparse
 import datetime
 import os
 
+def calcFixProb(args, currParmValue, param, dim, origAdjGrid, dualAdjGrid, payoffMatrix, start, folder, datestr):
+    if args.initMutant == -1:
+        grid = genRandGrid(dim, prob=args.frac)
+    else:
+        grid = genRandGridNum(dim, num=args.initMutant)
+    # changing small-world-ification; need to re-do smallWorldIfy
+    adjGrid = np.copy(origAdjGrid)
+    strParam = str(round(currParmValue, 6))
+    if args.debug:
+        print(param + " = " + strParam + ". Time elapsed: " + str(timer() - start))
+    if param == 's':
+        smallWorldIfyHeterogeneous(adjGrid, currParmValue, args.heterogeneity, args.replace)
+    if param == 'h':
+        smallWorldIfyHeterogeneous(adjGrid, args.swc, currParmValue, args.replace)        
+    else:
+        smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, args.replace)
+    if args.debug:
+        print("Grid smallworldified. Time elapsed: " + str(timer() - start))
+    # these will be arrays of the values for every simulation
+    mutants = np.zeros(args.niters)
+    fdscp = FDSCP(dim, payoffMatrix, adjGrid, grid, dualAdjGrid)
+    
+    # run the simulation on this many different, random grids
+    for sim in range(args.niters):
+        if args.debug:
+            print("Running simulation: " + str(sim))
+            print("Sim = " + str(sim) + ". Time elapsed: " + str(timer() - start))
+        # make file to output live cell count and cluster every step
+        if args.output >= 3:
+            outfile_steps = open(args.outfile + folder + "data3/" + param + "=" + strParam +\
+                "_sim=" + str(sim) + datestr + ".txt", "w")
+            outfile_steps.writelines("Step  mutants Cluster\n")
+        # reset grid to fresh state
+        if args.initMutant == -1:
+            grid = genRandGrid(dim, prob=args.frac)
+        else:
+            grid = genRandGridNum(dim, num=args.initMutant)
+        fdscp.grid = grid
+        fdscp.init()
+        if args.debug:
+            print("Grid reset. Time elapsed: " + str(timer() - start))
+        steps = args.simlength
+        if args.output < 3:
+            if args.debug:
+                run(fdscp, steps, args.delay, 0, args.visible, 1000, args.test)
+            else:
+                run(fdscp, steps, args.delay, 0, args.visible, -1, args.test)
+                
+        else:
+            for step in range(steps/args.sample + 1):
+                if args.debug:
+                    print("Step = " + str(step) + " Time elapsed: " + str(timer() - start))
+                # output data to file
+                outfile_steps.writelines(str(step * args.sample) + "    " + str(countLiveCells(grid)) + "    " + str(cluster(grid, fdscp.adjGrid)) + "\n")
+                # step once
+                run(fdscp, args.sample, args.delay, 0, args.visible, -1)
+                # make file, and output grid to that file
+                if args.output >= 4:
+                    outfile_grids = open(args.outfile + folder + "data4/" + "swc=" + strswc + "_sim=" + str(sim) + "_step=" + str(step * args.sample) + datestr + ".txt", "w")
+                    printGrid(grid, -1, grid.shape, outfile_grids)
+                    outfile_grids.close()
+
+            outfile_steps.close()
+
+        if args.debug:
+            print("Simulation finished. Time elapsed: " + str(timer() - start))
+
+        mutants[sim] = countLiveCells(grid)
+        
+        if args.debug:
+            print("Finished running simulation. Time elapsed: " + str(timer() - start))
+    
+    zero = np.zeros(len(mutants))
+    fixationEvents = mutants > 0
+
+    # NOTE: if simulation never ends until one of the species fixates, this will equal the fixation probability
+    return np.sum(fixationEvents) / len(fixationEvents)
+
 
 def main(args):
     start = datetime.datetime.now()
@@ -67,82 +145,9 @@ def main(args):
 
     # "fudge factor" needed because of floating-point precision limitations
     while swc <= args.maxswc + 0.0000000001:
-        if args.initMutant == -1:
-            grid = genRandGrid(dim, prob=args.frac)
-        else:
-            grid = genRandGridNum(dim, num=args.initMutant)
-        # changing small-world-ification; need to re-do smallWorldIfy
-        adjGrid = np.copy(origAdjGrid)
-        strswc = str(round(swc, 6))
-        if args.debug:
-            print("SWC = " + strswc + ". Time elapsed: " + str(timer() - start))
-            #print(fdscp.adjGrid)
-        smallWorldIfyHeterogeneous(adjGrid, swc, args.heterogeneity, args.replace)
-        if args.debug:
-            #print(fdscp.adjGrid)
-            print("Grid smallworldified. Time elapsed: " + str(timer() - start))
-        # these will be arrays of the values for every simulation
-        mutants = np.zeros(args.niters)
-        cl = np.zeros(args.niters)
-        fdscp = FDSCP(dim, payoffMatrix, adjGrid, grid, dualAdjGrid)
+        fixProb = calcFixProb(args, currParmValue, param, dim, origAdjGrid, dualAdjGrid, payoffMatrix, start, folder, datestr):
         
-        # run the simulation on this many different, random grids
-        for sim in range(args.niters):
-            print("Running simulation: " + str(sim))
-            if args.debug:
-                print("Sim = " + str(sim) + ". Time elapsed: " + str(timer() - start))
-            # make file to output live cell count and cluster every step
-            if args.output >= 3:
-                outfile_steps = open(args.outfile + folder + "data3/" + "swc=" + strswc +\
-                    "_sim=" + str(sim) + datestr + ".txt", "w")
-                outfile_steps.writelines("Step  mutants Cluster\n")
-            # reset grid to fresh state
-            if args.initMutant == -1:
-                grid = genRandGrid(dim, prob=args.frac)
-            else:
-                grid = genRandGridNum(dim, num=args.initMutant)
-            fdscp.grid = grid
-            fdscp.init()
-            if args.debug:
-                print("Grid reset. Time elapsed: " + str(timer() - start))
-            steps = args.simlength
-            if args.output < 3:
-                run(fdscp, steps, args.delay, 0, args.visible, 1000, args.debug)
-            else:
-                for step in range(steps/args.sample + 1):
-                    if args.debug:
-                        print("Step = " + str(step) + " Time elapsed: " + str(timer() - start))
-                    # output data to file
-                    outfile_steps.writelines(str(step * args.sample) + "    " + str(countLiveCells(grid)) + "    " + str(cluster(grid, fdscp.adjGrid)) + "\n")
-                    # step once
-                    run(fdscp, args.sample, args.delay, 0, args.visible, -1)
-                    # make file, and output grid to that file
-                    if args.output >= 4:
-                        outfile_grids = open(args.outfile + folder + "data4/" + "swc=" + strswc + "_sim=" + str(sim) + "_step=" + str(step * args.sample) + datestr + ".txt", "w")
-                        printGrid(grid, -1, grid.shape, outfile_grids)
-                        outfile_grids.close()
-
-                outfile_steps.close()
-
-            if args.debug:
-                print("Simulation finished. Time elapsed: " + str(timer() - start))
-
-            mutants[sim] = countLiveCells(grid)
-            cl[sim] = cluster(grid, fdscp.adjGrid)
-            
-            if args.debug:
-                print("Finished computing live cells and clustering. Time elapsed: " + str(timer() - start))
-
-        # calculate mean clustering of situations where mutant didn't go extinct
-        cl_new = []
-        for c in cl:
-            # WT went to fixation - ignore this case
-            if c == -1:
-                continue
-            cl_new.append(c)
-        
-        avgcl = 0
-        stdcl = 0
+        # fix outputting to files below
         avglc = round(np.mean(mutants), 3)
         stdlc = round(np.std(mutants), 3)
         if len(cl_new) > 0:
@@ -165,6 +170,7 @@ def main(args):
 
         if args.debug:
             print("Finished outputting everything to files. Time elapsed: " + str(timer() - start))
+        
     if args.output >= 1:
         outfile_avg.close()
 
@@ -191,12 +197,8 @@ if __name__ == '__main__':
                         type=int, default=1) #
     parser.add_argument('-l', "--simlength", help="Length of each simulation",
                         type=int, default=-1) #
-    parser.add_argument('-ms', "--minswc", help="Minimum small world coefficient",
+    parser.add_argument('-s', "--swc", help="Small world coefficient (for lattice only)",
                         type=float, default=0) #
-    parser.add_argument('-xs', "--maxswc", help="Maximum small world coefficient",
-                        type=float, default=0) #
-    parser.add_argument('-ss', "--stepswc", help="Step for small world coefficient",
-                        type=float, default=1) #
     parser.add_argument('-o', "--output",
                         help=("Specify output format. Options:\n"
                             "0: do not output to file\n"
@@ -220,8 +222,6 @@ if __name__ == '__main__':
     parser.add_argument('-d', "--delay", help="Time delay between steps",
                         type=float, default=0)
                         
-    parser.add_argument('-db', "--debug", help="Enter debug mode",
-                        action='store_true', default=False)
 
     parser.add_argument('-aa', "--aa", help="Fitness of A when interacting with A", type=float, default=1)
 
@@ -244,6 +244,22 @@ if __name__ == '__main__':
                         "If this option is used, the -v flag must not be used.\n"
                         "The graph-displaying function can currently display only grid-like graphs, not custom graphs.\n"),
                         default="")
+
+    parser.add_argument('-pl', '--plot', help=("Plot fixation probabilities of the given parameter"
+                        "from 0 to its stated value.\n Fixation probabilities are computed by"
+                        "running the simulation niters times for each value of the parameter.\n"
+                        "Valid inputs are a, b, c, s, or h, for the parameters a, b, c,"
+                        "the small-world coefficient of the graph, and the small-world heterogeneity."),
+                        default="")
+
+    parser.add_argument('-st', '--step', help="Step size of parameter in plot function", type=float, default=0.1)
+
+    parser.add_argument('-db', "--debug", help="Enter debug mode (prints more stuff to output)",
+                        action='store_true', default=False)
+
+    parser.add_argument('-t', "--test", help="Activate unit tests (may increase computation time)", action='store_true', default=False)
+    
+
 
     args = parser.parse_args()
     main(args)

@@ -5,7 +5,7 @@ from time import sleep
 from numba import *
 from simulate import cNorm
 
-def run(fdscp, steps, delay, initDelay, printInd, indSteps, debug=False):
+def run(fdscp, steps, delay, initDelay, printInd, indSteps, unitTest=False):
     """ Runs the Command-Line interface for a specified number of steps,
         or forever if the number of steps is specified to be -1."""
     step = 0
@@ -16,7 +16,7 @@ def run(fdscp, steps, delay, initDelay, printInd, indSteps, debug=False):
         # print index
         if indSteps is not -1 and step % indSteps is 0:
             print("Step = " + str(step) + ", mutants = " + str(fdscp.numMutants))
-            if debug:
+            if unitTest:
                 assert((fdscp.initFitnesses() == fdscp.fitnesses).all())
                 assert((fdscp.fitnessReal == np.array(list(map(cNorm,fdscp.fitnesses)))).all())
         # we are at fixation
