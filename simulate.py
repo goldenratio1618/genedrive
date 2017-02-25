@@ -210,6 +210,25 @@ def torusAdjFunc(coord, dim):
             adj[i] -= dim[i]
 
     return adj
+
+def torusAdjFunc4(coord, dim):
+    """ Same as torusAdjFunc but produces 4-regular instead of 8-regular lattice"""
+    ldim = len(dim)
+    pos = coord[0:ldim]
+    # this adjacency function does not use this many adjacent locations
+    val = coord[ldim]
+    if val >= 2 * ldim:
+        return dim
+    arr = dirFromNum4(val, ldim)
+    adj = np.add(arr, pos)
+
+    for i in range(ldim):
+        if adj[i] < 0:
+            adj[i] += dim[i]
+        elif adj[i] >= dim[i]:
+            adj[i] -= dim[i]
+
+    return adj
     
 def randomizedAdjFunc(prevAdjFunc, dim, pos, currTuple, dist, jumpProb):
     """ Implements a randomized adjacency function.
@@ -250,6 +269,26 @@ def dirFromNum(val, ldim):
         arr[ldim - i - 1] = val % 3 - 1
         val = val // 3
     return arr  
+
+def dirFromNum4(val, ldim):
+    """ Returns the direction corresponding to an integer in a 4-lattice.
+
+        Used to generate adjacency tables (i.e. the "space"). Operates using
+        base 3, but excludes same point (0,0,...,0). Assumes the grid
+        is Cartesian. Output will be a difference vector in the form of an
+        array, which must be added to the current vector. Assumes val does
+        not exceed maximum value (3^ldim-1). """
+    # only going to implement this function in 2D case
+    assert(ldim == 2)
+    assert(val <= 3)
+    if val == 0:
+        return [1, 0]
+    elif val == 1:
+        return [0, 1]
+    elif val == 2:
+        return [-1, 0]
+    elif val == 3:
+        return [0, -1]
   
 
 """ Below are a variety of useful operations on the grid. """

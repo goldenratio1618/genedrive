@@ -19,6 +19,7 @@ def run(fdscp, steps, delay, initDelay, printInd, indSteps, unitTest=False):
             if unitTest:
                 assert((fdscp.initFitnesses() == fdscp.fitnesses).all())
                 assert((fdscp.fitnessReal == np.array(list(map(cNorm,fdscp.fitnesses)))).all())
+                assert((fdscp.totFitness == np.sum(fdscp.fitnessReal)))
         # we are at fixation
         if fdscp.evolve():
             break
@@ -28,6 +29,7 @@ def run(fdscp, steps, delay, initDelay, printInd, indSteps, unitTest=False):
             # allow initial position to be more easily visible
             sleep(initDelay)
         step += 1
+    return step
             
 def horizontalLine(dim):
     """Draws a horizontal line, with two vertical bars at either end."""

@@ -9,30 +9,14 @@ import numpy as np
 import argparse
 import datetime
 import os
+from matplotlib import pyplot as plt
 
-def calcFixProb(args, currParmValue, param, dim, origAdjGrid, dualAdjGrid, payoffMatrix, start, folder, datestr):
-    if args.initMutant == -1:
-        grid = genRandGrid(dim, prob=args.frac)
-    else:
-        grid = genRandGridNum(dim, num=args.initMutant)
-    # changing small-world-ification; need to re-do smallWorldIfy
-    adjGrid = np.copy(origAdjGrid)
-    strParam = str(round(currParmValue, 6))
-    if args.debug:
-        print(param + " = " + strParam + ". Time elapsed: " + str(timer() - start))
-    if param == 's':
-        smallWorldIfyHeterogeneous(adjGrid, currParmValue, args.heterogeneity, args.replace)
-    if param == 'h':
-        smallWorldIfyHeterogeneous(adjGrid, args.swc, currParmValue, args.replace)        
-    else:
-        smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, args.replace)
-    if args.debug:
-        print("Grid smallworldified. Time elapsed: " + str(timer() - start))
+def calcFixProb(args, fdscp, dim, start, folder, datestr):
     # these will be arrays of the values for every simulation
     mutants = np.zeros(args.niters)
-    fdscp = FDSCP(dim, payoffMatrix, adjGrid, grid, dualAdjGrid)
-    
+    stepsToFix = np.zeros(args.niters)
     # run the simulation on this many different, random grids
+    # (for symmetric grids, randomness will not matter)
     for sim in range(args.niters):
         if args.debug:
             print("Running simulation: " + str(sim))
@@ -54,11 +38,12 @@ def calcFixProb(args, currParmValue, param, dim, origAdjGrid, dualAdjGrid, payof
         steps = args.simlength
         if args.output < 3:
             if args.debug:
-                run(fdscp, steps, args.delay, 0, args.visible, 1000, args.test)
+                stepsToFix[sim] = run(fdscp, steps, args.delay, 0, args.visible, 1000, args.test)
             else:
-                run(fdscp, steps, args.delay, 0, args.visible, -1, args.test)
+                stepsToFix[sim] = run(fdscp, steps, args.delay, 0, args.visible, -1, args.test)
                 
         else:
+            # TODO: get this stuff to work...
             for step in range(steps/args.sample + 1):
                 if args.debug:
                     print("Step = " + str(step) + " Time elapsed: " + str(timer() - start))
@@ -84,10 +69,35 @@ def calcFixProb(args, currParmValue, param, dim, origAdjGrid, dualAdjGrid, payof
     
     zero = np.zeros(len(mutants))
     fixationEvents = mutants > 0
+    fixTime = 0
+    if len(stepsToFix[fixationEvents]) > 0:
+        fixTime = np.sum(stepsToFix[fixationEvents]) / len(stepsToFix[fixationEvents])
 
-    # NOTE: if simulation never ends until one of the species fixates, this will equal the fixation probability
-    return np.sum(fixationEvents) / len(fixationEvents)
+    # NOTE: if simulation never ends until one of the species fixates, the second entry will equal the fixation probability
+    return (mutants, np.sum(fixationEvents) / len(fixationEvents), stepsToFix, fixTime)
 
+def binarySearch(args, fdscp, dim, start, folder, datestr):
+    """ Starts a binary search for 'critical' value w_c with FP(w_c) = 1/n.
+        Assumes parameter value w is given in args, and uses input parameter p. """
+    currMin = args.min
+    currMax = args.wtfitness
+    guess = -1
+    data = {}
+    for i in range(args.depth):
+        guess = (currMax + currMin)/2
+        # replace wild type fitness with our guessed fitness
+        fdscp.payoffMatrix = np.array([[guess ** 2, guess*1j],[guess, fdscp.payoffMatrix[1,1]]], dtype = np.complex128)
+        data[guess] = calcFixProb(args, fdscp, dim, start, folder, datestr)
+        if data[guess][1] == 1/fdscp.totElements:
+            return (guess, data)
+        elif data[guess][1] < 1/fdscp.totElements:
+            # FP too small, so wild-type fitness is too high
+            currMax = guess
+        else:
+            # too high of a FP, so wtfitness is too low
+            currMin = guess
+    guess = (currMax + currMin)/2
+    return (guess, data)
 
 def main(args):
     start = datetime.datetime.now()
@@ -99,9 +109,9 @@ def main(args):
         os.mkdir(args.outfile + folder + "/data" + str(i) + "/")
     # add extra parameters
     datestr = "frac=" + str(args.frac) + "_rows=" + str(args.rows) + "_cols=" + \
-        str(args.cols) + "_extraspace=" + str(args.extraspace) + "_niters=" + \
-        str(args.niters) + "_simlength=" + str(args.simlength) + "_replace=" + \
-        str(args.replace) + "_heterogeneity=" + str(args.heterogeneity)
+        str(args.cols) + "_p=" + str(args.probsurvival) + "_w=" + str(args.wtfitness) + \
+         "_niters=" + str(args.niters) + "_simlength=" + str(args.simlength) + \
+        "_heterogeneity=" + str(args.heterogeneity)
 
     adjGrid = None
     dim = None
@@ -118,61 +128,137 @@ def main(args):
     if args.output >= 1:
         # this file stores averages of final values across all simulations per swc
         outfile_avg = open(args.outfile + folder + "data1/" + datestr + ".txt", "w")
-        # will be structured as a table with these 5 columns
-        outfile_avg.writelines("SWC  mutants Std Cluster Std\n")
 
     start = timer()
     if dim is None:
         dim = np.array([args.rows,args.cols])
     
-    payoffMatrix = np.array([[args.bb,args.ab*1j],[args.ab,args.aa]], dtype = np.complex128)
+    payoffMatrix = np.array([[args.wtfitness ** 2, args.wtfitness*1j],[args.wtfitness, args.probsurvival]], dtype = np.complex128)
     if adjGrid is None:
-        adjGrid = initAdjGrid(torusAdjFunc, dim, args.extraspace)
-
-    if args.debug:
-        print("payoff matrix (mutant is second row & column):")
-        print(payoffMatrix)
-        print("Initialized simulation. Time elapsed: " + str(timer() - start))
+        if args.fourRegular:
+            adjGrid = initAdjGrid(torusAdjFunc4, dim, args.extraspace)
+        else:
+            adjGrid = initAdjGrid(torusAdjFunc, dim, args.extraspace)
     # original torus adjacency grid, to be used as fresh template for small-world
     origAdjGrid = np.copy(adjGrid)
-    # amount of small-world-ification to do
-    swc = args.minswc
+    
+    # set up small world network if it's needed
+    if args.swc > 0:
+        if args.graphFile:
+            raise ValueError("Small-world networks are only available in lattice mode.")
+        smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, args.replace)
 
     if args.debug and args.graphFile != '':
         print("adjGrid = " + str(adjGrid))
         print("dualAdjGrid = " + str(dualAdjGrid))
         
+    max_val = -1
+    if args.plot == 'p': max_val = args.probsurvival
+    elif args.plot == 'w': max_val = args.wtfitness
+    elif args.plot == 's': max_val = args.swc
+    elif args.plot == 'h': max_val = args.heterogeneity
 
-    # "fudge factor" needed because of floating-point precision limitations
-    while swc <= args.maxswc + 0.0000000001:
-        fixProb = calcFixProb(args, currParmValue, param, dim, origAdjGrid, dualAdjGrid, payoffMatrix, start, folder, datestr):
-        
-        # fix outputting to files below
-        avglc = round(np.mean(mutants), 3)
-        stdlc = round(np.std(mutants), 3)
-        if len(cl_new) > 0:
-            avgcl = round(np.mean(cl_new), 6)
-            stdcl = round(np.std(cl_new), 6)
-        if args.output >= 1:
-            outfile_avg.writelines(strswc + "    " + str(avglc) + "    " + str(stdlc) + "    " + str(avgcl) + "    " + str(stdcl) + "\n")
+    # if we aren't plotting, we can simply compute fixation probability at the given point
+    var_values = [args.probsurvival]
+    # if we are plotting, get the range we will be plotting over
+    if max_val != -1:
+        var_values = np.linspace(args.min, max_val, args.numpoints)
+
+    if args.plot == 'w' and args.binsearch:
+        raise ValueError("Cannot run binary search unless w is fixed.")
+
+    fixProbs = []
+    fixTimes = []
+
+    # critical w values found by binary search
+    wcVals = []
+    
+    for var in var_values:
+        if args.initMutant == -1:
+            grid = genRandGrid(dim, prob=args.frac)
+        else:
+            grid = genRandGridNum(dim, num=args.initMutant)
+
+        # we need to change the adjacency grid if we are changing small world properties
+        if args.plot in ['s', 'h']:
+            adjGrid = np.copy(origAdjGrid)
+        strParam = str(round(var, 6))
         if args.debug:
-            print("Output: " + strswc + "    " + str(avglc) + "    " + str(stdlc) + "    " + str(avgcl) + "    " + str(stdcl))
-        print("Mutant final population sizes: " + str(mutants))
-        # make and output file of range of different final values in
-        # simulations
+            print(strParam + " = " + str(var) + ". Time elapsed: " + str(timer() - start))
+        
+        # make sure we incorporate the relevant parameter value into the calculation
+        if args.plot == 's':
+            smallWorldIfyHeterogeneous(adjGrid, var, args.heterogeneity, args.replace)
+        elif args.plot == 'h':
+            smallWorldIfyHeterogeneous(adjGrid, args.swc, var, args.replace)
+        elif args.swc > 0:
+            smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, args.replace)
+
+        if args.plot == 'p':
+            payoffMatrix = np.array([[args.wtfitness ** 2, args.wtfitness*1j],[args.wtfitness, var]], dtype = np.complex128)
+        elif args.plot == 'w':
+            payoffMatrix = np.array([[var ** 2, var*1j],[var, args.probsurvival]], dtype = np.complex128)
+
+        if args.debug:
+            print("payoff matrix (mutant is second row & column):")
+            print(payoffMatrix)
+            print("Initialized simulation. Time elapsed: " + str(timer() - start))
+
+        if args.debug and (args.plot in ['s', 'h'] or args.swc > 0):
+            print("Grid smallworldified. Time elapsed: " + str(timer() - start))
+
+        # now that the adjGrid is set up, we can proceed to compute the fixation probability
+        fdscp = FDSCP(dim, payoffMatrix, adjGrid, grid, dualAdjGrid)
+
+        if args.binsearch:
+            wc, data = binarySearch(args, fdscp, dim, start, folder, datestr)
+            wcVals.append(wc)
+        else:
+            mutants, fixProb, stepsToFix, timeToFix = calcFixProb(args, fdscp, dim, start, folder, datestr)
+            fixProbs.append(fixProb)
+            fixTimes.append(timeToFix)
+        
+        if args.output >= 1:
+            if args.binsearch:
+                for guess in data:
+                    outfile_avg.writelines(args.plot + " = " + strParam + ", w = " + str(guess) + ": fixation prob = " + str(data[guess][1]) + ", fixation time = " + str(data[guess][3]) + "\n")
+                    print(args.plot + " = " + strParam + ", w = " + str(guess) + ": fixation prob = " + str(data[guess][1]) + ", fixation time = " + str(data[guess][3]))
+                outfile_avg.writelines("Critical w value = " + str(wc) + "\n")
+                print("Critical w value = " + str(wc))
+            else:
+                outfile_avg.writelines(args.plot + " = " + strParam + ": fixation prob = " + str(fixProb) + ", fixation time = " + str(timeToFix) + "\n")
+                print(args.plot + " = " + strParam + ": fixation prob = " + str(fixProb) + ", fixation time = " + str(timeToFix))
+        # make an output file of the range of different final mutant values in simulations (as opposed to simply the fixation probability)
         if args.output >= 2:
-            outfile_final = open(args.outfile + folder + "data2/" + "swc=" + strswc + datestr + ".txt", "w")
-            outfile_final.writelines("Run  mutants  Cluster\n")
-            for i in range(len(mutants)):
-                outfile_final.writelines(str(i) + "    " + str(mutants[i]) + "    " + str(round(cl[i], 6)) + "\n")
-            outfile_final.close()
-        swc += args.stepswc
+            if args.binsearch:
+                for guess in data:
+                    for i in range(len(data[guess][0])):
+                        outfile_final = open(args.outfile + folder + "data2/" + strParam + " = " + str(var) + "_w=" + str(guess) + datestr + ".txt", "w")
+                        outfile_final.writelines("Run  mutants  time\n")
+                        outfile_final.writelines(str(i) + "    " + str(data[guess][0][i]) + "     " + str(data[guess][2][i]) + "\n")
+                        outfile_final.close()
+            else:
+                for i in range(len(mutants)):
+                    outfile_final = open(args.outfile + folder + "data2/" + strParam + " = " + str(var) + datestr + ".txt", "w")                
+                    outfile_final.writelines("Run  mutants  time\n")                
+                    outfile_final.writelines(str(i) + "    " + str(mutants[i]) + "     " + str(stepsToFix[i]) + "\n")
+                    outfile_final.close()
 
         if args.debug:
             print("Finished outputting everything to files. Time elapsed: " + str(timer() - start))
         
     if args.output >= 1:
         outfile_avg.close()
+    if args.binsearch:
+        plt.plot(var_values, wcVals)
+        plt.xlabel(args.plot)
+        plt.ylabel('Critical w value')
+        plt.show()
+    else:
+        plt.plot(var_values, fixProbs)
+        plt.xlabel(args.plot)
+        plt.ylabel('Fixation probability')
+        plt.show()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Gene Drive Analysis Frontend",
@@ -182,6 +268,8 @@ if __name__ == '__main__':
                         type=float, default=0.35) #
     parser.add_argument('-m', '--initMutant', help="Number of mutant cells at beginning. Overrides -f if not -1 (defaults to 1).",
                         type=int, default=1)
+    parser.add_argument('-fr', '--fourRegular', help="Use 4-regular lattice instead of 8-regular lattice.",
+                        action='store_true', default=False)
     parser.add_argument('-r', '--rows', help="Number of rows of the grid",
                         type=int, default=32) #
     parser.add_argument('-c', "--cols", help="Number of columns of the grid",
@@ -213,7 +301,7 @@ if __name__ == '__main__':
                             " numbers, e.g. 3 will also output 2\n"),
                         type=int, default=0)
                         
-    parser.add_argument('-p', '--replace', help="Remove edges when constructing small world",
+    parser.add_argument('-rp', '--replace', help="Remove edges when constructing small world",
                         action="store_false", default=True)
                             
     parser.add_argument('-g', '--heterogeneity', help="Heterogeneity of SWN",
@@ -223,17 +311,15 @@ if __name__ == '__main__':
                         type=float, default=0)
                         
 
-    parser.add_argument('-aa', "--aa", help="Fitness of A when interacting with A", type=float, default=1)
+    parser.add_argument('-ps', "--probsurvival", help="Probability of homozygous offspring surviving the embryo", type=float, default=1)
 
-    parser.add_argument('-ab', "--ab", help="Fitness of A/B when interacting with B/A", type=float, default=2)
-
-    parser.add_argument('-bb', "--bb", help="Fitness of B when interacting with B", type=float, default=4)
+    parser.add_argument('-w', "--wtfitness", help="Fitness of wild-type (assuming fitness of gene drive is 1)", type=float, default=2)
 
 
-    parser.add_argument('-s', "--sample", help="When using output modes 3 or 4, how often should the grid be sampled?",
+    parser.add_argument('-sa', "--sample", help="When using output modes 3 or 4, how often should the grid be sampled?",
                         type=int, default=10)
 
-    parser.add_argument('-of', "--outfile", help="Output file to store data in", default="D:/OneDrive/Documents/genedrive_data/")
+    parser.add_argument('-of', "--outfile", help="Output folder to store data in", default="D:/OneDrive/Documents/genedrive_data/")
 
     parser.add_argument('-gr', "--graphFile",
                         help=("Name of file containing graph structure. If blank, loads Cartesian graph.\n"
@@ -245,14 +331,25 @@ if __name__ == '__main__':
                         "The graph-displaying function can currently display only grid-like graphs, not custom graphs.\n"),
                         default="")
 
-    parser.add_argument('-pl', '--plot', help=("Plot fixation probabilities of the given parameter"
+    parser.add_argument('-p', '--plot', help=("Plot fixation probabilities of the given parameter"
                         "from 0 to its stated value.\n Fixation probabilities are computed by"
                         "running the simulation niters times for each value of the parameter.\n"
-                        "Valid inputs are a, b, c, s, or h, for the parameters a, b, c,"
+                        "Valid inputs are p, w, s, or h, for the parameters a, w,"
                         "the small-world coefficient of the graph, and the small-world heterogeneity."),
                         default="")
 
-    parser.add_argument('-st', '--step', help="Step size of parameter in plot function", type=float, default=0.1)
+    parser.add_argument('-b', '--binsearch', help=("Binary search for the value of w such that FP = 1/n.\n"
+                        "Searches w values from 0 to input w value (recommended value: 4).\n"
+                        "Cannot be used in conjunction with '-p w' argument.\n"
+                        "Can be used in conjunction with other plot parameters, in which case a separate binary search will be run"
+                        "for each value of the parameter, and the plot will use the determined w values on the y-axis."),
+                        default=False, action="store_true")
+
+    parser.add_argument('--depth', help="Depth of binary search - accuracy will be w/2^depth", type=int, default=10)
+
+    parser.add_argument('-min', '--min', help="Minimum value of parameter in the plot. Strongly advised to be positive if 'w' plot argument used.", type=float, default=0)
+
+    parser.add_argument('-np', '--numpoints', help="Number of points to plot (only used when --plot argument is used)", type=int, default=51)
 
     parser.add_argument('-db', "--debug", help="Enter debug mode (prints more stuff to output)",
                         action='store_true', default=False)
