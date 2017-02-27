@@ -141,12 +141,6 @@ def main(args):
             adjGrid = initAdjGrid(torusAdjFunc, dim, args.extraspace)
     # original torus adjacency grid, to be used as fresh template for small-world
     origAdjGrid = np.copy(adjGrid)
-    
-    # set up small world network if it's needed
-    if args.swc > 0:
-        if args.graphFile:
-            raise ValueError("Small-world networks are only available in lattice mode.")
-        smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, args.replace)
 
     if args.debug and args.graphFile != '':
         print("adjGrid = " + str(adjGrid))
@@ -184,16 +178,17 @@ def main(args):
             adjGrid = np.copy(origAdjGrid)
         strParam = str(round(var, 6))
         if args.debug:
-            print(strParam + " = " + str(var) + ". Time elapsed: " + str(timer() - start))
+            print(args.plot + " = " + strParam + ". Time elapsed: " + str(timer() - start))
         
         # make sure we incorporate the relevant parameter value into the calculation
         if args.plot == 's':
-            smallWorldIfyHeterogeneous(adjGrid, var, args.heterogeneity, args.replace)
+            adjGrid = smallWorldIfyHeterogeneous(adjGrid, var, args.heterogeneity, args.replace)
         elif args.plot == 'h':
-            smallWorldIfyHeterogeneous(adjGrid, args.swc, var, args.replace)
+            adjGrid = smallWorldIfyHeterogeneous(adjGrid, args.swc, var, args.replace)
         elif args.swc > 0:
-            smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, args.replace)
+            adjGrid = smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, args.replace)
 
+        # make dual adj grid for SWN case
         if args.plot == 'p':
             payoffMatrix = np.array([[args.wtfitness ** 2, args.wtfitness*1j],[args.wtfitness, var]], dtype = np.complex128)
         elif args.plot == 'w':
@@ -206,6 +201,7 @@ def main(args):
 
         if args.debug and (args.plot in ['s', 'h'] or args.swc > 0):
             print("Grid smallworldified. Time elapsed: " + str(timer() - start))
+            print(adjGrid)
 
         # now that the adjGrid is set up, we can proceed to compute the fixation probability
         fdscp = FDSCP(dim, payoffMatrix, adjGrid, grid, dualAdjGrid)
@@ -233,13 +229,13 @@ def main(args):
             if args.binsearch:
                 for guess in data:
                     for i in range(len(data[guess][0])):
-                        outfile_final = open(args.outfile + folder + "data2/" + strParam + " = " + str(var) + "_w=" + str(guess) + datestr + ".txt", "w")
+                        outfile_final = open(args.outfile + folder + "data2/" + args.plot + "=" + str(var) + "_w=" + str(guess) + datestr + ".txt", "a")
                         outfile_final.writelines("Run  mutants  time\n")
                         outfile_final.writelines(str(i) + "    " + str(data[guess][0][i]) + "     " + str(data[guess][2][i]) + "\n")
                         outfile_final.close()
             else:
                 for i in range(len(mutants)):
-                    outfile_final = open(args.outfile + folder + "data2/" + strParam + " = " + str(var) + datestr + ".txt", "w")                
+                    outfile_final = open(args.outfile + folder + "data2/" + args.plot + "=" + str(var) + datestr + ".txt", "w")                
                     outfile_final.writelines("Run  mutants  time\n")                
                     outfile_final.writelines(str(i) + "    " + str(mutants[i]) + "     " + str(stepsToFix[i]) + "\n")
                     outfile_final.close()

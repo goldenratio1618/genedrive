@@ -6,6 +6,7 @@ import numpy as np
 from timeit import default_timer as timer
 from random import randrange
 from operator import mul
+from queue import Queue
 
 #TODO: Implement grid-loading function
 def cNorm(a):
@@ -17,6 +18,13 @@ def dual(dim, adjGrid):
     dualAdjGrid = np.zeros(adjGrid.shape, dtype=np.int32)
     currentPos = np.zeros(dim, dtype=np.int8)
     it = np.nditer(iter_arr, flags=['multi_index'])
+
+    # initialize dual adjGrid
+    while not it.finished:
+        dualAdjGrid[it.multi_index] = dim
+        it.iternext()
+    
+    it = np.nditer(iter_arr, flags=['multi_index'])    
     while not it.finished:
         pos = it.multi_index[0:len(dim)]
         if (adjGrid[it.multi_index] != dim).any():
@@ -28,16 +36,9 @@ def dual(dim, adjGrid):
             dualAdjGrid[tuple(adjGrid[it.multi_index])][currentPos[pos]] = pos
             currentPos[pos] += 1
         it.iternext()
-    # fill the rest of the dual adjGrid with 'blank' values
-    it = np.nditer(iter_arr, flags=['multi_index'])
-    while not it.finished:
-        pos = it.multi_index[0:len(dim)]
-        while currentPos[pos] < adjGrid.shape[len(adjGrid.shape) - 2]:
-            dualAdjGrid[tuple(adjGrid[it.multi_index])][currentPos[pos]] = dim
-            currentPos[pos] += 1
-        it.iternext()
 
-    #TODO: this second loop doesn't work
+    #print("dual adjGrid")
+    #print(dualAdjGrid)
     return dualAdjGrid
 
 def unFlatten(ind, dim):
@@ -336,8 +337,20 @@ def getHubs(numHubs, ldim, adjGridShape):
     
     return hubs
 
-@autojit
 def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True):
+    dim = adjGrid.shape[0:len(adjGrid.shape)-2]
+    cpAdjGrid = np.copy(adjGrid)
+    swh_notconnected(cpAdjGrid, jumpProb, heterogeneity, replace)
+    while not isConnected(dim, cpAdjGrid):
+        print("Grid not connected, trying again...")
+        cpAdjGrid = np.copy(adjGrid)
+        swh_notconnected(cpAdjGrid, jumpProb, heterogeneity, replace)
+    return cpAdjGrid
+
+
+
+#@autojit
+def swh_notconnected(adjGrid, jumpProb, heterogeneity=0, replace=True):
     """ Turns the adjacency grid into a small-world network.
         This works as follows: for each edge, we rewire it into
         a random edge (with the same starting vertex) with a given
@@ -351,7 +364,14 @@ def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True)
     iter_arr = np.empty(adjGrid.shape[0:ldim+1], dtype=np.int8)
     dim = np.array(dim)
     it = np.nditer(iter_arr, flags=['multi_index'])
-    maxIndex = 3 ** ldim - 1
+    maxIndex = -1
+    index = 0
+    # calculate k, where the graph is assumed to be k-regular
+    for nb in adjGrid[tuple([0 for i in range(ldim)])]:
+        if (nb == dim).all():
+            maxIndex = index
+            break
+        index += 1
     
     numVertices = np.prod(adjGrid.shape[0:ldim])
     hubs = getHubs(np.random.choice(numVertices, int((1 - heterogeneity) * numVertices), replace=False), ldim, adjGrid.shape)
@@ -433,7 +453,25 @@ def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True)
                     break
 
         it.iternext()
-    
+
+def isConnected(dim, adjGrid):
+    """ Checks if the given graph is connected. Assumes graph is undirected. """
+    nodesVisited = []
+    queue = Queue()
+    queue.put((0,0))
+    while not queue.empty():
+        node = queue.get()
+        if node not in nodesVisited:
+            nodesVisited.append(node)
+            for nb in adjGrid[node]:
+                if (nb != dim).any():
+                    queue.put(tuple(nb))
+    # get size of graph
+    size = 1
+    for d in dim:
+        size *= d
+    return len(nodesVisited) == size
+
 @autojit
 def smallWorldIfy(adjGrid, jumpProb):
     """ Turns the adjacency grid into a small-world network.
