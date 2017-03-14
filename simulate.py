@@ -101,7 +101,6 @@ class FDSCP:
         return payoff
 
     def update(self, loc, old, new):
-        #TODO: Make totFitness work for complex payoffs
         """ Updates fitnesses and edge probabilities when the individual at loc changes
             type from old to new """
         loc = tuple(loc)
