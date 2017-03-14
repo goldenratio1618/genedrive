@@ -4,7 +4,12 @@ def genCircle(n, file):
     for i in range(n):
         file.writelines(str(i) + ',' + str((i-1) % n) + '\n')
         file.writelines(str(i) + ',' + str((i+1) % n) + '\n')
-        
+
+def genComplete(n, file):
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                file.writelines(str(i) + ',' + str(j) + '\n')
 
 def genLine(n, file):
     for i in range(n-1):
@@ -44,6 +49,8 @@ if __name__ == '__main__':
         genLine(args.number, file)
     elif args.type == 'doublecomplete':
         genDoubleComplete(args.number, file)
+    elif args.type == 'complete':
+        genComplete(args.number, file)
     else:
         file.close()
         raise ValueError("Unsupported graph type.")
