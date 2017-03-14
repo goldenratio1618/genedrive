@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 from matplotlib import pyplot as plt
+from math import log
 
 def P(i, j, a, b, c, n):
     """ Computes the transition probabilities """
@@ -41,7 +42,12 @@ def fixProb(i, a, b, c, n, debug=False):
         if j >= i:
             prod *= alpha
         if debug and (j % 100 == 0 or j < 100):
-            print("j = " + str(j) + ", alpha = " + str(alpha) + ", prod = " + str(prod))
+            print("j = " + str(j) + ", alpha = " + str(alpha) + ", prod = " + str(prod) +
+                ", 1 - alpha = " + str(1-alpha) + ", log(alpha)=" + str(log(alpha)))
+            a_i = 2*b*((2*b)**j - c**j)/((2*b)**(j+1) - c**(j+1))
+            print("a = " + str(a_i) + ", alpha - a = " + str(alpha - a_i))
+
+
     return prod
 
 def main(args):

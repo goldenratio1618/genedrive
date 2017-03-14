@@ -77,8 +77,8 @@ def calcFixProb(args, fdscp, dim, start, folder, datestr):
     return (mutants, np.sum(fixationEvents) / len(fixationEvents), stepsToFix, fixTime)
 
 def binarySearch(args, fdscp, dim, start, folder, datestr):
-    """ Starts a binary search for 'critical' value w_c with FP(w_c) = 1/n.
-        Assumes parameter value w is given in args, and uses input parameter p. """
+    """ Starts a binary search for 'critical' value F_{B,cr} with P_F(F_{B,cr}) = 1/n.
+        Assumes parameter value F_B is given in args, and uses input parameter a. """
     currMin = args.min
     currMax = args.wtfitness
     guess = -1
@@ -109,7 +109,7 @@ def main(args):
         os.mkdir(args.outfile + folder + "/data" + str(i) + "/")
     # add extra parameters
     datestr = "frac=" + str(args.frac) + "_rows=" + str(args.rows) + "_cols=" + \
-        str(args.cols) + "_p=" + str(args.probsurvival) + "_w=" + str(args.wtfitness) + \
+        str(args.cols) + "_p=" + str(args.hzfitness) + "_w=" + str(args.wtfitness) + \
          "_niters=" + str(args.niters) + "_simlength=" + str(args.simlength) + \
         "_heterogeneity=" + str(args.heterogeneity)
 
@@ -133,7 +133,7 @@ def main(args):
     if dim is None:
         dim = np.array([args.rows,args.cols])
     
-    payoffMatrix = np.array([[args.wtfitness ** 2, args.wtfitness*1j],[args.wtfitness, args.probsurvival]], dtype = np.complex128)
+    payoffMatrix = np.array([[args.wtfitness ** 2, args.wtfitness*1j],[args.wtfitness, args.hzfitness]], dtype = np.complex128)
     if adjGrid is None:
         if args.fourRegular:
             adjGrid = initAdjGrid(torusAdjFunc4, dim, args.extraspace)
@@ -147,18 +147,18 @@ def main(args):
         print("dualAdjGrid = " + str(dualAdjGrid))
         
     max_val = -1
-    if args.plot == 'p': max_val = args.probsurvival
-    elif args.plot == 'w': max_val = args.wtfitness
+    if args.plot == 'a': max_val = args.hzfitness
+    elif args.plot == 'fb': max_val = args.wtfitness
     elif args.plot == 's': max_val = args.swc
     elif args.plot == 'h': max_val = args.heterogeneity
 
     # if we aren't plotting, we can simply compute fixation probability at the given point
-    var_values = [args.probsurvival]
+    var_values = [args.hzfitness]
     # if we are plotting, get the range we will be plotting over
     if max_val != -1:
         var_values = np.linspace(args.min, max_val, args.numpoints)
 
-    if args.plot == 'w' and args.binsearch:
+    if args.plot == 'fb' and args.binsearch:
         raise ValueError("Cannot run binary search unless w is fixed.")
 
     fixProbs = []
@@ -182,17 +182,17 @@ def main(args):
         
         # make sure we incorporate the relevant parameter value into the calculation
         if args.plot == 's':
-            adjGrid = smallWorldIfyHeterogeneous(adjGrid, var, args.heterogeneity, args.replace)
+            adjGrid = smallWorldIfyHeterogeneous(adjGrid, var, args.heterogeneity, not args.keep)
         elif args.plot == 'h':
-            adjGrid = smallWorldIfyHeterogeneous(adjGrid, args.swc, var, args.replace)
+            adjGrid = smallWorldIfyHeterogeneous(adjGrid, args.swc, var, not args.keep)
         elif args.swc > 0:
-            adjGrid = smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, args.replace)
+            adjGrid = smallWorldIfyHeterogeneous(adjGrid, args.swc, args.heterogeneity, not args.keep)
 
         # make dual adj grid for SWN case
-        if args.plot == 'p':
+        if args.plot == 'a':
             payoffMatrix = np.array([[args.wtfitness ** 2, args.wtfitness*1j],[args.wtfitness, var]], dtype = np.complex128)
-        elif args.plot == 'w':
-            payoffMatrix = np.array([[var ** 2, var*1j],[var, args.probsurvival]], dtype = np.complex128)
+        elif args.plot == 'fb':
+            payoffMatrix = np.array([[var ** 2, var*1j],[var, args.hzfitness]], dtype = np.complex128)
 
         if args.debug:
             print("payoff matrix (mutant is second row & column):")
@@ -204,7 +204,7 @@ def main(args):
             print(adjGrid)
 
         # now that the adjGrid is set up, we can proceed to compute the fixation probability
-        fdscp = FDSCP(dim, payoffMatrix, adjGrid, grid, dualAdjGrid)
+        fdscp = FDSCP(dim, payoffMatrix, adjGrid, grid, dualAdjGrid, args.randomPlacement)
 
         if args.binsearch:
             wc, data = binarySearch(args, fdscp, dim, start, folder, datestr)
@@ -297,8 +297,8 @@ if __name__ == '__main__':
                             " numbers, e.g. 3 will also output 2\n"),
                         type=int, default=0)
                         
-    parser.add_argument('-rp', '--replace', help="Remove edges when constructing small world",
-                        action="store_false", default=True)
+    parser.add_argument('-kp', '--keep', help="Add more edges when constructing small world network (default is to replace existing edges)",
+                        action="store_true", default=False)
                             
     parser.add_argument('-g', '--heterogeneity', help="Heterogeneity of SWN",
                         type=float, default=0)
@@ -307,9 +307,9 @@ if __name__ == '__main__':
                         type=float, default=0)
                         
 
-    parser.add_argument('-ps', "--probsurvival", help="Probability of homozygous offspring surviving the embryo", type=float, default=1)
+    parser.add_argument('-a', "--hzfitness", help="Probability of homozygous offspring surviving the embryo", type=float, default=1)
 
-    parser.add_argument('-w', "--wtfitness", help="Fitness of wild-type (assuming fitness of gene drive is 1)", type=float, default=2)
+    parser.add_argument('-fb', "--wtfitness", help="Fitness of wild-type (assuming fitness of gene drive is 1)", type=float, default=2)
 
 
     parser.add_argument('-sa', "--sample", help="When using output modes 3 or 4, how often should the grid be sampled?",
@@ -327,10 +327,13 @@ if __name__ == '__main__':
                         "The graph-displaying function can currently display only grid-like graphs, not custom graphs.\n"),
                         default="")
 
+    parser.add_argument('-rp', '--randomPlacement', help="Place new offspring randomly on the graph, instead of in a neighboring location.",
+                        action='store_true', default=False);
+
     parser.add_argument('-p', '--plot', help=("Plot fixation probabilities of the given parameter"
                         "from 0 to its stated value.\n Fixation probabilities are computed by"
                         "running the simulation niters times for each value of the parameter.\n"
-                        "Valid inputs are p, w, s, or h, for the parameters a, w,"
+                        "Valid inputs are a, f, s, or h, for the parameters a, F_B,"
                         "the small-world coefficient of the graph, and the small-world heterogeneity."),
                         default="")
 
@@ -343,7 +346,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--depth', help="Depth of binary search - accuracy will be w/2^depth", type=int, default=10)
 
-    parser.add_argument('-min', '--min', help="Minimum value of parameter in the plot. Strongly advised to be positive if 'w' plot argument used.", type=float, default=0)
+    parser.add_argument('-min', '--min', help="Minimum value of parameter in the plot. Strongly advised to be positive if 'fb' plot argument used.", type=float, default=0)
 
     parser.add_argument('-np', '--numpoints', help="Number of points to plot (only used when --plot argument is used)", type=int, default=51)
 

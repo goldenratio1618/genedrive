@@ -8,7 +8,6 @@ from random import randrange
 from operator import mul
 from queue import Queue
 
-#TODO: Implement grid-loading function
 def cNorm(a):
     return a.real + a.imag
 
@@ -28,17 +27,10 @@ def dual(dim, adjGrid):
     while not it.finished:
         pos = it.multi_index[0:len(dim)]
         if (adjGrid[it.multi_index] != dim).any():
-            # print('printing stuff')
-            # print(it.multi_index)
-            # print(adjGrid[it.multi_index])
-            # print(currentPos[pos])
-            # print(dualAdjGrid.shape)
             dualAdjGrid[tuple(adjGrid[it.multi_index])][currentPos[pos]] = pos
             currentPos[pos] += 1
         it.iternext()
 
-    #print("dual adjGrid")
-    #print(dualAdjGrid)
     return dualAdjGrid
 
 def unFlatten(ind, dim):
@@ -52,12 +44,13 @@ def unFlatten(ind, dim):
 
 """ Code for initializing fitness values for each location in grid."""
 class FDSCP:
-    def __init__(self, dim, payoffMatrix, adjGrid, grid, dualAdjGrid = None):
+    def __init__(self, dim, payoffMatrix, adjGrid, grid, dualAdjGrid=None, randomPlacement=False):
         self.dim = dim
         self.payoffMatrix = payoffMatrix
         self.adjGrid = adjGrid
         self.grid = grid
         self.totElements = 1
+        self.randomPlacement = randomPlacement
         for i in range(len(self.dim)):
             self.totElements *= self.dim[i]
         if dualAdjGrid is None:
@@ -67,8 +60,6 @@ class FDSCP:
         self.init()
 
 
-    #TODO: Make sure this will actually work (especially with adjGrid having a buffer)
-    #TODO: Make this more efficient (by creating backwards adjGrid)
     def initFitnesses(self):
         fitnesses = np.zeros(self.dim, dtype=np.complex128)
         it = np.nditer(fitnesses, flags=['multi_index'])
@@ -80,13 +71,13 @@ class FDSCP:
     def init(self):
         self.fitnesses = self.initFitnesses()
         self.numMutants = 0
-        it = np.nditer(self.grid, flags = ['multi_index'])
+        it = np.nditer(self.grid, flags=['multi_index'])
         while not it.finished:
             if (it.multi_index != self.dim).any():
                 self.numMutants += it[0]
             it.iternext()
         self.gridRavel = np.ravel(self.grid)
-        self.fitnessReal = np.array(list(map(cNorm,self.fitnesses)))
+        self.fitnessReal = np.array(list(map(cNorm, self.fitnesses)))
         self.fitnessRavel = np.ravel(self.fitnessReal)
         self.totFitness = np.sum(self.fitnessReal)
         self.indList = np.arange(len(self.fitnessRavel))
@@ -140,8 +131,8 @@ class FDSCP:
     def getRandInd(self):
         """ Gets a random individual in the adjacency grid, with probability
             proportional to that edge's fitness """
-        # TODO: make new array with CNorm already done to save compute time
         return np.random.choice(self.indList, p=self.fitnessRavel/self.totFitness)
+
         
     def evolve(self):
         """ The original evolve function.
@@ -151,19 +142,18 @@ class FDSCP:
             return 1
         # individual that gets to reproduce
         ind = unFlatten(self.getRandInd(), self.dim)
-        # print(self.grid[tuple(ind)])
-        #print(self.fitnesses)
-        #print(self.totFitness)
         # individual we are going to replace
-        replace = self.adjGrid[ind + (np.random.randint(0, len(self.adjGrid[ind])),)]
-        while (replace == self.dim).all():
+        if self.randomPlacement:
+            replace = unFlatten(np.random.randint(0, len(self.indList)))
+        else:
             replace = self.adjGrid[ind + (np.random.randint(0, len(self.adjGrid[ind])),)]
+            while (replace == self.dim).all():
+                replace = self.adjGrid[ind + (np.random.randint(0, len(self.adjGrid[ind])),)]
         oldType = self.grid[tuple(replace)]
         r = np.random.random()
         if r <= self.fitnesses[ind].real / cNorm(self.fitnesses[ind]):
             self.grid[tuple(replace)] = self.grid[ind]
         else:
-            # print('Complex')
             self.grid[tuple(replace)] = 1 - self.grid[ind]
         self.update(replace, oldType, self.grid[tuple(replace)])
         return 0
