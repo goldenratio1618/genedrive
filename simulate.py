@@ -144,7 +144,7 @@ class FDSCP:
         ind = unFlatten(self.getRandInd(), self.dim)
         # individual we are going to replace
         if self.randomPlacement:
-            replace = unFlatten(np.random.randint(0, len(self.indList)))
+            replace = unFlatten(np.random.randint(0, len(self.indList)), self.dim)
         else:
             replace = self.adjGrid[ind + (np.random.randint(0, len(self.adjGrid[ind])),)]
             while (replace == self.dim).all():
