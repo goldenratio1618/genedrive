@@ -35,7 +35,7 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--number', help="Number of individuals", type=int, default=100)
     parser.add_argument('-f', '--file', help="Output file. Defaults to sample_graphs/TYPE_N.txt (where TYPE and N are the other arguments)",
                         default="")
-    parser.add_argument('-t', '--type', help="Type of graph to create. Supported types are 'circle', 'line', and 'doublecomplete'.",
+    parser.add_argument('-t', '--type', help="Type of graph to create. Supported types are 'circle', 'line', 'complete', and 'doublecomplete'.",
                         default='circle')
 
     args = parser.parse_args()

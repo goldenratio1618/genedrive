@@ -63,11 +63,12 @@ def main(args):
         plt.show()
     
     if args.plot == 'n':
-        n_range = np.arange(args.i, args.n + 1)
-        probs = [fixProb(args.i, args.a, args.b, args.c, n) for n in n_range]
-        plt.plot(n_range, probs)
+        n_range = np.arange(args.i, args.n + 1, max(int(args.step), 1))
+        probs = np.array([fixProb(args.i, args.a, args.b, args.c, n) for n in n_range])
+        # plot n * P_F(n) to get a better sense of what is actually happening
+        plt.plot(n_range, n_range * probs)
         plt.xlabel('Number of individuals')
-        plt.ylabel('Fixation probability')
+        plt.ylabel('Fixation probability * n')
         plt.show()
 
     if args.plot == 'a':
@@ -101,13 +102,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Fixation Probability Calculator", epilog="")
 
     parser.add_argument('-a', '--a', help="Coefficient 'a' in the payoff matrix",
-                        type=float, default=0)
-
-    parser.add_argument('-b', '--b', help="Coefficient 'b' in the payoff matrix",
                         type=float, default=1)
 
-    parser.add_argument('-c', '--c', help="Coefficient 'c' in the payoff matrix",
+    parser.add_argument('-b', '--b', help="Coefficient 'b' in the payoff matrix",
                         type=float, default=2)
+
+    parser.add_argument('-c', '--c', help="Coefficient 'c' in the payoff matrix",
+                        type=float, default=4)
 
     parser.add_argument('-n', '--n', help="Number of cells",
                         type=int, default=10)
@@ -123,11 +124,12 @@ if __name__ == '__main__':
                         "If a, b, or c is chosen, the plot range will be from 0 to the input value of that parameter."),
                         default="")
 
-    parser.add_argument('-d', '--debug', help="Activate debug mode (which prints alpha values)",
-                        action='store_true', default=False)
-    
     parser.add_argument('-s', '--step', help="If plotting a, b, or c, this will represent the step size in the plot.",
                         type=int, default=0.1)
+
+    parser.add_argument('-db', '--debug', help="Activate debug mode (which prints alpha values)",
+                        action='store_true', default=False)
+    
 
     args = parser.parse_args()
     main(args)

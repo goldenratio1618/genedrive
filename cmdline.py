@@ -1,97 +1,115 @@
-import os
-import sys
-import numpy as np
-from time import sleep
-from numba import *
-from simulate import cNorm
+import argparse
 
-def run(fdscp, steps, delay, initDelay, printInd, indSteps, unitTest=False):
-    """ Runs the Command-Line interface for a specified number of steps,
-        or forever if the number of steps is specified to be -1."""
-    step = 0
-    while step < steps or steps == -1:
-        # print grid
-        if printInd is not -1 and step % printInd is 0:
-            printGrid(fdscp.grid, step, fdscp.dim)
-        # print index
-        if indSteps is not -1 and step % indSteps is 0:
-            print("Step = " + str(step) + ", mutants = " + str(fdscp.numMutants))
-            if unitTest:
-                assert((fdscp.initFitnesses() == fdscp.fitnesses).all())
-                assert((fdscp.fitnessReal == np.array(list(map(cNorm,fdscp.fitnesses)))).all())
-                assert((fdscp.totFitness == np.sum(fdscp.fitnessReal)))
-        # we are at fixation
-        if fdscp.evolve():
-            break
-        if delay > 0:
-            sleep(delay)
-        if step == 0:
-            # allow initial position to be more easily visible
-            sleep(initDelay)
-        step += 1
-    return step
-            
-def horizontalLine(dim):
-    """Draws a horizontal line, with two vertical bars at either end."""
-    line = "|"
-    for _ in range(dim):
-        line += "_"
-    line += "|\n"
-    return line
 
-def printGrid(grid, step, dim, file=None):
-    """ Prints the grid """
-    grid_str = ""
-    if step is not -1:
-        grid_str += "STEP: " + str(step) + "\n"
-    grid_str += horizontalLine(dim[1])
-    for i in range(dim[0]):
-        grid_str += "|"
-        for j in range(dim[1]):
-            if grid[i][j]:
-                grid_str += "X"
-            else:
-                grid_str += " "
-        grid_str += "|\n"
-    # cross-platform way to clear terminal, for the next round of
-    # printing the grid
-    grid_str += horizontalLine(dim[1])
-    if file is None:
-        os.system('cls' if os.name == 'nt' else 'clear')
-        print(grid_str)
-        sys.stdout.flush()
-    else:
-        file.writelines(grid_str)
+def getArgs():
+    parser = argparse.ArgumentParser(description="Gene Drive Analysis Frontend",
+                                 epilog="")
 
-def parseGraph(graph):
-    adjGridDict = {}
-    dualAdjGridDict = {}
-    for line in graph:
-        start,end=line.split(",")
-        if int(start) in adjGridDict.keys():
-            adjGridDict[int(start)].append(int(end))
-        else:
-            adjGridDict[int(start)] = [int(end)]
-        
-        if int(start) in dualAdjGridDict.keys():
-            dualAdjGridDict[int(start)].append(int(end))
-        else:
-            dualAdjGridDict[int(start)] = [int(end)]
-    
-    # add 1 to be consistent with other grid layout, which has dimension dim + 1
-    dim = max(max(adjGridDict.keys()), max([max(i) for i in adjGridDict.values()])) + 1
-    adjGrid = np.full((dim, max([len(a) for a in adjGridDict.values()]), 1), dim, dtype=np.int32)
-    dualAdjGrid = np.full((dim, max([len(a) for a in dualAdjGridDict.values()]), 1), dim, dtype=np.int32)
-    it = np.nditer(adjGrid, flags=['multi_index'])
-    while not it.finished:
-        if it.multi_index[0] in adjGridDict.keys() and it.multi_index[1] < len(adjGridDict[it.multi_index[0]]):
-            adjGrid[it.multi_index] = adjGridDict[it.multi_index[0]][it.multi_index[1]]
-        it.iternext()
-    
-    it = np.nditer(dualAdjGrid, flags=['multi_index'])
-    while not it.finished:
-        if it.multi_index[0] in dualAdjGridDict.keys() and it.multi_index[1] < len(dualAdjGridDict[it.multi_index[0]]):
-            dualAdjGrid[it.multi_index] = dualAdjGridDict[it.multi_index[0]][it.multi_index[1]]
-        it.iternext()
-    return dim,adjGrid,dualAdjGrid
+    parser.add_argument('-of', "--outfile", help="Output directory to store data in", default="")
 
+    parser.add_argument('-o', "--output",
+                        help=("Specify output format. Options:\n"
+                                "0: do not output to file\n"
+                                "1: output averages of final values across all "
+                                "simulations per given small world coefficient\n"
+                                "2: output final values for every simulation\n"
+                                "Higher numbers also output everything for all lower"
+                                " numbers, e.g. 2 will also output 1\n"),
+                        type=int, default=0)
+
+    parser.add_argument('-gf', "--graphFile",
+                        help=("Name of file containing graph structure.\n"
+                              "File should be structured as a sequence of lines A,B."
+                              "Here A and B are vertices, and this line represents an edge from A to B.\n"
+                              "If this option is disabled, the program will generate and use a lattice graph.\n"
+                              "If enabled, this setting will override the row and column arguments.\n"
+                              "This graph will still be small-worldified - if this is not desired, set small world coefficient to 0.\n"
+                              "There is currently no way to represent weighted graphs with this simulation.\n"
+                              "If this option is used, the -v flag must not be used.\n"
+                              "The graph-displaying function can currently display only grid-like graphs, not custom graphs.\n"),
+                        default="")
+
+    parser.add_argument('-rp', '--randomPlacement', help="Place new offspring randomly on the graph, instead of in a neighboring location.",
+                        action='store_true', default=False)
+
+    parser.add_argument('-r', '--rows',
+                        help="Number of rows of the lattice if a custom graph is not being used",
+                        type=int, default=15)
+
+    parser.add_argument('-c', "--cols",
+                        help="Number of columns of the lattice if a custom graph is not being used",
+                        type=int, default=15)
+
+    parser.add_argument('-fr', '--fourRegular',
+                        help="Use 4-regular lattice instead of 8-regular lattice.",
+                        action='store_true', default=False)
+
+    parser.add_argument('-pl', '--plot', help=("Plot fixation probabilities of the given parameter"
+                        "from 0 to its stated value.\n Fixation probabilities are computed by"
+                        "running the simulation niters times for each value of the parameter.\n"
+                        "Valid inputs are a, f, s, or h, for the parameters a, F_B,"
+                        "the small-world coefficient of the graph, and the small-world heterogeneity."),
+                        default="")
+
+    parser.add_argument('-min', '--min', help="Minimum value of parameter in the plot. Strongly advised to be positive if 'fb' plot argument used.", type=float, default=0)
+
+    parser.add_argument('-np', '--numpoints', help="Number of points to plot (only used when --plot argument is used)", type=int, default=51)
+
+    parser.add_argument('-b', '--binsearch', help=("Binary search for the value of w such that FP = 1/n.\n"
+                        "Searches w values from 0 to input w value (recommended value: 4).\n"
+                        "Cannot be used in conjunction with '-p w' argument.\n"
+                        "Can be used in conjunction with other plot parameters, in which case a separate binary search will be run"
+                        "for each value of the parameter, and the plot will use the determined w values on the y-axis."),
+                        default=False, action="store_true")
+
+    parser.add_argument('--depth', help="Depth of binary search - accuracy will be w/2^depth", type=int, default=10)
+
+    parser.add_argument('-a', "--hzfitness", help="Probability of homozygous offspring surviving the embryo", type=float, default=1)
+
+    parser.add_argument('-fb', "--wtfitness", help="Fitness of wild-type (assuming fitness of gene drive is 1)", type=float, default=2)
+
+    # this argument is not ready yet
+    # parser.add_argument('-p', "--genedriveprob", help="Probability of heterozygote passing mutant all", type=float, default=2)
+
+    parser.add_argument('-n', "--niters", help=("Number of times to run simulation "
+                                                "per each value of small world "
+                                                "coefficient"),
+                        type=int, default=100)
+
+    parser.add_argument('-s', "--swc",
+                        help=("Small world coefficient.\n"
+                              "If this argument is used, randomly chosen edges from the graph"
+                              "will be replaced with new random edges in accordance with"
+                              "the Watts-Strogatz model."),
+                        type=float, default=0)
+    parser.add_argument('-kp', '--keep', help="Add more edges when constructing small world network (default is to replace existing edges)",
+                        action="store_true", default=False)
+    parser.add_argument('-g', '--heterogeneity', help="Heterogeneity of SWN",
+                        type=float, default=0)
+
+    parser.add_argument('-f', '--frac', help="Fraction of mutant cells at beginning. Overriden by -m.",
+                        type=float, default=0.35) #
+    parser.add_argument('-m', '--initMutant', help="Number of mutant cells at beginning. Overrides -f if not -1 (defaults to 1).",
+                        type=int, default=1)
+    parser.add_argument('-e', "--extraspace",
+                        help="Amount of extra space to add to adjacency grid (this should not be changed in most cases).",
+                        type=int, default=5) #
+    parser.add_argument('-v', "--visible", help="Number of steps to show grid",
+                        type=int, default=-1) #
+    parser.add_argument('-l', "--simlength", help="Length of each simulation (leave blank to continue until fixation).",
+                        type=int, default=-1) #
+
+    parser.add_argument('-d', "--delay", help="Time delay between steps",
+                        type=float, default=0)
+
+    parser.add_argument('-sa', "--sample", help="Deprecated.",
+                        type=int, default=10)
+                        # When using output modes 3 or 4, how often should the grid be sampled?"
+
+
+    parser.add_argument('-db', "--debug", help="Enter debug mode (prints more stuff to output)",
+                        action='store_true', default=False)
+
+    parser.add_argument('-t', "--test", help="Activate unit tests (may increase computation time)", action='store_true', default=False)
+
+    return parser.parse_args()
