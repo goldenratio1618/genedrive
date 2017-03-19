@@ -19,7 +19,7 @@ Note that it uses a frequency-dependent selection with complex payoff framework,
 
 
 ### Simulation Parameters
-The gene-drive payoff matrix contains three parameters: the mutant homozygote fitness a, the wild-type fitness FB, and the gene-drive probability p. The first two parameters can be changed with the <code>-a</code> and <code>-fb</code> flags; we are currently working on implementing the ability to change p as well. Default values are a=1 and FB=2.
+The gene-drive payoff matrix contains three parameters: the mutant homozygote fitness a, the wild-type fitness FB, and the gene-drive probability p. They can be changed with the <code>-a</code>, <code>-fb</code>, and <code>-p</code> flags, respectively. Default values are a=1, FB=2, and p=1.
 
 The default replacement policy is to use the graph replacement probability distribution (that is, select a neighbor of the individual chosen to reproduce). However, this can be changed to the random replacement distribution (that is, the replaced individual is chosen at random out of the entire graph) by specifying the <code>-rp</code> argument.
 
@@ -29,13 +29,14 @@ The accuracy of the simulation can be changed using the <code>-n</code> argument
 The <code>main.py</code> program has many command-line arguments relating to the graph structure. If they are all left blank, the default behavior is to use a 15x15 8-regular lattice, which has toroidal boundary conditions. However, the size of this graph can be customized using the <code>-r</code> and <code>-c</code> arguments.
 Thus, <code>main.py -r 10 -c 20</code> will use a 10x20 8-regular graph.
 
-If the <code>-fr</code> argument is specified, the program will use a 4-regular lattice instead of an 8-regular lattice. Either of these lattices can be modified to be a Watts-Strogatz small-world network by using the <code>-s</code> argument, which specifies the probability that each edge will be replaced with a random edge.
+If the <code>-fr</code> argument is specified, the program will use a 4-regular lattice instead of an 8-regular lattice. Either of these lattices can be modified to be a Watts-Strogatz small-world network <cite>(Watts & Strogatz, 1998)</cite> by using the <code>-s</code> argument, which specifies the probability that each edge will be replaced with a random edge.
+By using the <code>-h</code> parameter, the heterogeneity of the small-world network can be changed, as described in (Fu, Liu, & Wang, 2007).
 
 In addition to lattices and small-world networks, custom graphs can be specified using the
 <code>-gf</code> argument, which allows the user to specify a file containing a list of edges. The vertices are assumed to be integers and the edges are to be listed as pairs A,B. For instance, the line 5,10 would specify an edge from vertex 5 to vertex 10. Undirected edges need to be specified as two lines, e.g. 5,10 and 10,5.
 
 ### Plotting Fixation Probabilities
-The program has the ability to change a parameter and plot the fixation probability as a function of that parameter by using the <code>-pl</code> argument. Currently, the parameters available to plot are the mutant homozygote fitness a, the wild-type fitness FB, the small-world coefficient s, and the small-world heterogeneity h. We are currently adding the ability to plot using the gene-drive probability p as well.
+The program has the ability to change a parameter and plot the fixation probability as a function of that parameter by using the <code>-pl</code> argument. Currently, the parameters available to plot are the mutant homozygote fitness a, the wild-type fitness FB, the gene-drive probability p, the small-world coefficient s, and the small-world heterogeneity h.
 
 The range of the plot will be from the <code>-min</code> argument (default 0) to the input value of the chosen parameter. The number of points to be plotted is given by the <code>-np</code> argument (default 51). For example,
 <code>main.py -pl fb -fb 4 -min 0.1 -np 40</code> will plot fixation probability vs. FB for FB = 0.1, 0.2, 0.3, ..., 4.0.
@@ -45,7 +46,8 @@ When plotting against the FB parameter, it is strongly recommended to set <code>
 The program also has the ability to binary search on the FB argument in order to find FB*. This is turned on using the <code>-b</code> flag. If used in conjunction with the <code>-p</code> flag, the program will run a separate instance of binary search for each value of the plotting parameter, and it will then plot FB* (not fixation probability) vs that parameter. It is not possible to plot FB while running binary search, so <code>-p fb -b</code> is an illegal argument list.
 
 ### Output
-The program can output in a variety of different ways. By default, it will simply print the calculated fixation probability and average time to fixation and exit; if a plot or binary search was in effect, it will print them for each parameter value. However, using the <code>-o</code> argument, the program can be made to output to a file as well. If <code> -o 1</code> is specified, the program will print the fixation probabilities to a file (in addition to standard output). We are currently working on implementing additional output options, such as outputting the time to fixation for each simulation, and outputting mutants vs time for each simulation.
+The program can output in a variety of different ways. By default, it will simply print the calculated fixation probability and average time to fixation and exit; if a plot or binary search was in effect, it will print them for each parameter value. However, using the <code>-o</code> argument, the program can be made to output to a file as well. If <code> -o 1</code> is specified, the program will print the fixation probabilities to a file (in addition to standard output). If <code> -o 2</code> is specified, the program will also output a file containing the time to fixation for each simulation.
+We are currently working on implementing additional output options, such as outputting the number of mutants at each time step in each simulation.
 
 By default, the program will create a timestamp-named directory in the current working directory and put all of the output in there. However, it may be desirable to have the output somewhere else to avoid cluttering the working directory. To this end, the <code>-of</code> argument can be used to redirect the output into a folder of choice. Note that the presence or absence of a slash / at the end of the <code>-of</code> makes a difference:
 
@@ -74,3 +76,10 @@ This program uses the analytical product formula for the fixation probability on
 By specifying the <code>-p</code> option, this program will generate a plot of fixation probability against the specified parameter (e.g. <code>-p n</code> will generate fixation probability vs. n). The parameter range is always 0 to its stated value, or i to its stated value in the case of n. Here "stated value" is the value of the parameter that was passed in as a command-line argument (or its default value if no such argument was passed). Default values are 1, 2, 4, 10, and 1 for a, b, c, n, and i, respectively.
 
 The <code>-step</code> argument can be specified when plotting is enabled; it sets the step between consecutive points in the plot.
+
+# References
+
+Fu, F., Liu, L.-H., & Wang, L. (2007). Evolutionary Prisoner's Dilemma on heterogeneous Newman-Watts small-world network. The European Physical Journal B, 367-372.
+
+Watts, D. J., & Strogatz, S. H. (1998). Collective dynamics of 'small-world' networks. Nature, 440-442.
+

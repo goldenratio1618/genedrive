@@ -1,17 +1,20 @@
 import argparse
 
 def genCircle(n, file):
+    """ Generates an n-cycle """
     for i in range(n):
         file.writelines(str(i) + ',' + str((i-1) % n) + '\n')
         file.writelines(str(i) + ',' + str((i+1) % n) + '\n')
 
 def genComplete(n, file):
+    """ Generates an n-complete graph """
     for i in range(n):
         for j in range(n):
             if i != j:
                 file.writelines(str(i) + ',' + str(j) + '\n')
 
 def genLine(n, file):
+    """ Generates an n-line """
     for i in range(n-1):
         file.writelines(str(i) + ',' + str(i+1) + '\n')
 

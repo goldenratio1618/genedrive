@@ -11,7 +11,6 @@ from time import sleep
 def cNorm(a):
     return a.real + a.imag
 
-""" Code for initializing fitness values for each location in grid."""
 class FDSCP:
     def __init__(self, dim, payoffMatrix, adjGrid, grid, dualAdjGrid=None, randomPlacement=False):
         self.dim = dim
@@ -30,6 +29,7 @@ class FDSCP:
 
 
     def initFitnesses(self):
+        """ Code for initializing fitness values for each location in grid."""
         fitnesses = np.zeros(self.dim, dtype=np.complex128)
         it = np.nditer(fitnesses, flags=['multi_index'])
         while not it.finished:
@@ -80,6 +80,9 @@ class FDSCP:
             cl = tuple(connLoc)
             diff = self.payoffMatrix[self.grid[cl]][new] - self.payoffMatrix[self.grid[cl]][old]
             self.fitnesses[cl] += diff
+            # make sure rounding errors don't create negative probabilities
+            if abs(self.fitnesses[cl]) < 1E-15:
+                self.fitnesses[cl] = 0
             oldReal = self.fitnessReal[cl]
             self.fitnessReal[cl] = cNorm(self.fitnesses[cl])
             self.totFitness += self.fitnessReal[cl] - oldReal
@@ -92,10 +95,10 @@ class FDSCP:
                 continue
             cl = tuple(connLoc)
             self.fitnesses[loc] += self.payoffMatrix[new][self.grid[cl]]
-        
+
         self.fitnessReal[loc] += cNorm(self.fitnesses[loc])
         self.totFitness += self.fitnessReal[loc]
-            
+
 
     def getRandInd(self):
         """ Gets a random individual in the adjacency grid, with probability
@@ -104,8 +107,7 @@ class FDSCP:
 
         
     def evolve(self):
-        """ The original evolve function.
-            Works for grids of any dimension, but may be slower."""
+        """ Runs one step of the FDSCP process and updates the state of the system """
         # simulation finished - one of the species has gone to fixation
         if (self.numMutants == 0) or (self.numMutants == self.totElements):
             return 1
@@ -128,8 +130,7 @@ class FDSCP:
         return 0
 
 def run(fdscp, steps, delay, initDelay, printInd, indSteps, unitTest=False):
-    """ Runs the Command-Line interface for a specified number of steps,
-        or forever if the number of steps is specified to be -1."""
+    """ Runs the FDSCP process for a specified amount of time, or until one species successfully fixates """
     step = 0
     while step < steps or steps == -1:
         # print grid
@@ -154,6 +155,7 @@ def run(fdscp, steps, delay, initDelay, printInd, indSteps, unitTest=False):
     return step
 
 def calcFixProb(args, fdscp, dim, start, folder, datestr, ind=0):
+    """ Calculates the fixation probability for the given arguments """
     # these will be arrays of the values for every simulation
     mutants = np.zeros(args.niters)
     stepsToFix = np.zeros(args.niters)

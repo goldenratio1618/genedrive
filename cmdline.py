@@ -47,7 +47,7 @@ def getArgs():
     parser.add_argument('-pl', '--plot', help=("Plot fixation probabilities of the given parameter"
                         "from 0 to its stated value.\n Fixation probabilities are computed by"
                         "running the simulation niters times for each value of the parameter.\n"
-                        "Valid inputs are a, f, s, or h, for the parameters a, F_B,"
+                        "Valid inputs are a, fb, s, or h, for the parameters a, F_B,"
                         "the small-world coefficient of the graph, and the small-world heterogeneity."),
                         default="")
 
@@ -66,10 +66,9 @@ def getArgs():
 
     parser.add_argument('-a', "--hzfitness", help="Probability of homozygous offspring surviving the embryo", type=float, default=1)
 
-    parser.add_argument('-fb', "--wtfitness", help="Fitness of wild-type (assuming fitness of gene drive is 1)", type=float, default=2)
+    parser.add_argument('-fb', "--wtfitness", help="Fitness of wild-type (fitness of gene drive is 1)", type=float, default=2)
 
-    # this argument is not ready yet
-    # parser.add_argument('-p', "--genedriveprob", help="Probability of heterozygote passing mutant all", type=float, default=2)
+    parser.add_argument('-p', "--genedriveprob", help="Probability of heterozygote passing mutant allele to its offspring", type=float, default=1)
 
     parser.add_argument('-n', "--niters", help=("Number of times to run simulation "
                                                 "per each value of small world "

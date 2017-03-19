@@ -4,9 +4,7 @@ from numba import *
 from queue import Queue
 
 def countLiveCells(grid):
-    """ Returns the number of live cells in the grid.
-        
-        If the cells have multiple lives, returns the total number of lives. """
+    """ Returns the number of mutant cells in the grid """
     count = 0
     for val in np.nditer(grid):
         count += val
@@ -14,7 +12,7 @@ def countLiveCells(grid):
 
 @autojit
 def cluster(grid, adjGrid):
-    """ Returns the probability that neighbors of live cells are live
+    """ Returns the probability that neighbors of mutant cells are mutants
    
         This can be used as a measure of "randomness" of the grid -- i.e. if the
         grid is completely random, then this should roughly equal 1 - 2f + 2f^2,
@@ -57,9 +55,8 @@ def cluster(grid, adjGrid):
         it.iternext()
     return matches/total
     
-
-""" Below are a variety of adjacency functions, which can be used
-    to generate grids of various topologies for the grid. """
+# Below are a variety of adjacency functions, which can be used
+# to generate grids of various topologies for the grid.
     
 def stdAdjFunc(coord, dim):
     """ Returns all adjacent locations to a given position.
@@ -180,7 +177,7 @@ def dirFromNum4(val, ldim):
         return [0, -1]
   
 
-""" Below are a variety of useful operations on the grid. """
+# Below are a variety of useful operations on the grid.
 
 
 
@@ -207,6 +204,7 @@ def initAdjGrid(adjFunc, dim, extraSpace):
 
 @autojit
 def getHubs(numHubs, ldim, adjGridShape):
+    """ Gets hubs for heterogeneous Newman-Watts small-world network """
     hubs = np.empty((len(numHubs), ldim))
     
     filled = 0
@@ -226,6 +224,7 @@ def getHubs(numHubs, ldim, adjGridShape):
     return hubs
 
 def smallWorldIfyHeterogeneous(adjGrid, jumpProb, heterogeneity=0, replace=True):
+    """ Creates Newman-Watts small-world network """
     dim = adjGrid.shape[0:len(adjGrid.shape)-2]
     cpAdjGrid = np.copy(adjGrid)
     swh_notconnected(cpAdjGrid, jumpProb, heterogeneity, replace)

@@ -10,7 +10,18 @@ import datetime
 import os
 from matplotlib import pyplot as plt
 
+def genPayoffMatrix(a, fb, p):
+    """ Creates a payoff matrix corresponding to the given parameters """
+    return np.array([[fb ** 2, fb*(p * 1j + (1-p))],[fb*(p + (1-p)*1j), a]], dtype = np.complex128)
+
 def main(args):
+    """ Initializes and runs a simulation with the given command-line arguments """
+    if args.output > 2:
+        raise ValueError("Illegal value of output argument.")
+    if args.plot == 'fb' and args.min == 0:
+        raise ValueError("Minimum value must be nonzero when plotting with respect to fb")
+    if args.hzfitness < 0 or args.wtfitness < 0:
+        raise ValueError("Fitnesses must be nonnegative")
     start = datetime.datetime.now()
     # all new datafiles will be stored in this folder
     folder = start.strftime("%m-%d-%Y_%H-%M-%S") + "/"
@@ -21,11 +32,11 @@ def main(args):
     # add extra parameters
     if args.graphFile == "":
         if args.fourRegular:
-            datestr = "4regular_" + "_rows=" + str(args.rows) + "_cols=" + \
+            datestr = "4regular_" + "rows=" + str(args.rows) + "_cols=" + \
                 str(args.cols) + "_a=" + str(args.hzfitness) + "_fb=" + str(args.wtfitness) + \
                 "_niters=" + str(args.niters)
         else:
-            datestr = "8regular_" + "_rows=" + str(args.rows) + "_cols=" + \
+            datestr = "8regular_" + "rows=" + str(args.rows) + "_cols=" + \
                 str(args.cols) + "_a=" + str(args.hzfitness) + "_fb=" + str(args.wtfitness) + \
                 "_niters=" + str(args.niters)
     else:
@@ -60,7 +71,7 @@ def main(args):
         dim = np.array([dim])
 
     np.set_printoptions(threshold=np.inf)
-        
+
     if args.output >= 1:
         # this file stores averages of final values across all simulations per swc
         outfile_avg = open(args.outfile + folder + "data1/" + datestr + ".txt", "w")
@@ -68,8 +79,8 @@ def main(args):
     start = timer()
     if dim is None:
         dim = np.array([args.rows,args.cols])
-    
-    payoffMatrix = np.array([[args.wtfitness ** 2, args.wtfitness*1j],[args.wtfitness, args.hzfitness]], dtype = np.complex128)
+
+    payoffMatrix = genPayoffMatrix(args.hzfitness, args.wtfitness, args.genedriveprob)
     if adjGrid is None:
         if args.fourRegular:
             adjGrid = initAdjGrid(torusAdjFunc4, dim, args.extraspace)
@@ -85,6 +96,7 @@ def main(args):
     max_val = -1
     if args.plot == 'a': max_val = args.hzfitness
     elif args.plot == 'fb': max_val = args.wtfitness
+    elif args.plot == 'p': max_val = args.genedriveprob
     elif args.plot == 's': max_val = args.swc
     elif args.plot == 'h': max_val = args.heterogeneity
 
@@ -95,14 +107,14 @@ def main(args):
         var_values = np.linspace(args.min, max_val, args.numpoints)
 
     if args.plot == 'fb' and args.binsearch:
-        raise ValueError("Cannot run binary search unless w is fixed.")
+        raise ValueError("Cannot run binary search unless fb is fixed.")
 
     fixProbs = []
     fixTimes = []
 
     # critical w values found by binary search
     wcVals = []
-    
+
     for var in var_values:
         if args.initMutant == -1:
             grid = genRandGrid(dim, prob=args.frac)
@@ -115,7 +127,7 @@ def main(args):
         strParam = str(round(var, 6))
         if args.debug:
             print(args.plot + " = " + strParam + ". Time elapsed: " + str(timer() - start))
-        
+
         # make sure we incorporate the relevant parameter value into the calculation
         if args.plot == 's':
             adjGrid = smallWorldIfyHeterogeneous(adjGrid, var, args.heterogeneity, not args.keep)
@@ -126,9 +138,12 @@ def main(args):
 
         # make dual adj grid for SWN case
         if args.plot == 'a':
-            payoffMatrix = np.array([[args.wtfitness ** 2, args.wtfitness*1j],[args.wtfitness, var]], dtype = np.complex128)
+            payoffMatrix = genPayoffMatrix(var, args.wtfitness, args.genedriveprob)
         elif args.plot == 'fb':
-            payoffMatrix = np.array([[var ** 2, var*1j],[var, args.hzfitness]], dtype = np.complex128)
+            payoffMatrix = genPayoffMatrix(args.hzfitness, var, args.genedriveprob)
+        elif args.plot == 'p':
+            payoffMatrix = genPayoffMatrix(args.hzfitness, args.wtfitness, var)
+            
 
         if args.debug:
             print("payoff matrix (mutant is second row & column):")
@@ -150,49 +165,60 @@ def main(args):
             fixProbs.append(fixProb)
             fixTimes.append(timeToFix)
         
+        plotStr = ""
+        if args.plot != '':
+            plotStr = args.plot + " = " + strParam
         if args.binsearch:
+            if args.plot != '':
+                plotStr += ', '
             for guess in data:
                 if args.output >= 1:
-                    outfile_avg.writelines(args.plot + " = " + strParam + ", w = " + str(guess) + ": fixation prob = " + str(data[guess][1]) + ", fixation time = " + str(data[guess][3]) + "\n")
-                print(args.plot + " = " + strParam + ", w = " + str(guess) + ": fixation prob = " + str(data[guess][1]) + ", fixation time = " + str(data[guess][3]))
+                    outfile_avg.writelines(plotStr + " fb = " + str(guess) + ": fixation prob = " + str(data[guess][1]) + ", fixation time = " + str(data[guess][3]) + "\n")
+                print(plotStr + "fb = " + str(guess) + ": fixation prob = " + str(data[guess][1]) + ", fixation time = " + str(data[guess][3]))
             if args.output >= 1:
-                outfile_avg.writelines("Critical w value = " + str(wc) + "\n")
-            print("Critical w value = " + str(wc))
+                outfile_avg.writelines("Critical fb value = " + str(wc) + "\n")
+            print("Critical fb value = " + str(wc))
         else:
+            if args.plot != '':
+                plotStr += ': '
             if args.output >= 1:
-                outfile_avg.writelines(args.plot + " = " + strParam + ": fixation prob = " + str(fixProb) + ", fixation time = " + str(timeToFix) + "\n")
-            print(args.plot + " = " + strParam + ": fixation prob = " + str(fixProb) + ", fixation time = " + str(timeToFix))
+                outfile_avg.writelines(plotStr + "fixation prob = " + str(fixProb) + ", fixation time = " + str(timeToFix) + "\n")
+            print(plotStr + "fixation prob = " + str(fixProb) + ", fixation time = " + str(timeToFix))
+        if args.plot != '':
+            plotStr = args.plot + " = " + strParam + '_'
         # make an output file of the range of different final mutant values in simulations (as opposed to simply the fixation probability)
         if args.output >= 2:
             if args.binsearch:
                 for guess in data:
+                    outfile_final = open(args.outfile + folder + "data2/" + plotStr + "fb=" + str(guess) + datestr + ".txt", "w")
+                    outfile_final.writelines("Run  mutants  time\n")
                     for i in range(len(data[guess][0])):
-                        outfile_final = open(args.outfile + folder + "data2/" + args.plot + "=" + str(var) + "_w=" + str(guess) + datestr + ".txt", "a")
-                        outfile_final.writelines("Run  mutants  time\n")
                         outfile_final.writelines(str(i) + "    " + str(data[guess][0][i]) + "     " + str(data[guess][2][i]) + "\n")
-                        outfile_final.close()
-            else:
-                for i in range(len(mutants)):
-                    outfile_final = open(args.outfile + folder + "data2/" + args.plot + "=" + str(var) + datestr + ".txt", "w")                
-                    outfile_final.writelines("Run  mutants  time\n")                
-                    outfile_final.writelines(str(i) + "    " + str(mutants[i]) + "     " + str(stepsToFix[i]) + "\n")
                     outfile_final.close()
+            else:
+                outfile_final = open(args.outfile + folder + "data2/" + plotStr + datestr + ".txt", "w")
+                outfile_final.writelines("Run  mutants  time\n")
+                for i in range(len(mutants)):
+                    outfile_final.writelines(str(i) + "    " + str(mutants[i]) + "     " + str(stepsToFix[i]) + "\n")
+                outfile_final.close()
 
         if args.debug:
             print("Finished outputting everything to files. Time elapsed: " + str(timer() - start))
-        
+
     if args.output >= 1:
         outfile_avg.close()
-    if args.binsearch:
-        plt.plot(var_values, wcVals)
-        plt.xlabel(args.plot)
-        plt.ylabel('Critical w value')
-        plt.show()
-    elif args.plot != '':
-        plt.plot(var_values, fixProbs)
-        plt.xlabel(args.plot)
-        plt.ylabel('Fixation probability')
-        plt.show()
+
+    if args.plot != '':
+        if args.binsearch:
+            plt.plot(var_values, wcVals)
+            plt.xlabel(args.plot)
+            plt.ylabel('Critical fb value')
+            plt.show()
+        else:
+            plt.plot(var_values, fixProbs)
+            plt.xlabel(args.plot)
+            plt.ylabel('Fixation probability')
+            plt.show()
 
 if __name__ == '__main__':
     args = getArgs()
