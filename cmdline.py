@@ -71,8 +71,7 @@ def getArgs():
     parser.add_argument('-p', "--genedriveprob", help="Probability of heterozygote passing mutant allele to its offspring", type=float, default=1)
 
     parser.add_argument('-n', "--niters", help=("Number of times to run simulation "
-                                                "per each value of small world "
-                                                "coefficient"),
+                                                "per value of parameter."),
                         type=int, default=100)
 
     parser.add_argument('-s', "--swc",

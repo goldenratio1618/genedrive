@@ -231,7 +231,7 @@ def binarySearch(args, fdscp, dim, start, folder, datestr):
     """ Starts a binary search for 'critical' value F_{B,cr} with P_F(F_{B,cr}) = 1/n.
         Assumes parameter value F_B is given in args, and uses input parameter a. """
     ind = 0
-    currMin = args.min
+    currMin = 0
     currMax = args.wtfitness
     guess = -1
     data = {}
